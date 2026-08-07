@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Configurações — {{ project.name }}{% endblock %}
+{% block topbar_left %}
+<div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:2px"><a href="{% url 'projects:dashboard' %}" style="color:var(--text3)">Projetos</a> / <a href="{% url 'projects:kanban' pk=project.pk %}" style="color:var(--text3)">{{ project.name }}</a> /
+  </div>
+  <div style="display:flex;align-items:center;gap:8px"><div style="width:10px;height:10px;border-radius:50%;background:{{ project.color }}"></div><div class="topbar-title">Configurações</div></div>
+</div>
+{% endblock %}
+{% block topbar_actions %}
+<div class="view-pills"><a href="{% url 'projects:kanban' pk=project.pk %}" class="vpill">⊞ Kanban</a><a href="{% url 'projects:timeline' pk=project.pk %}" class="vpill">◷ Timeline</a><a href="{% url 'projects:task_list' pk=project.pk %}" class="vpill">≡ Lista</a></div>
+<a href="{% url 'projects:project_scope' project.id %}" class="btn-folder"> 📁 </a>
+<a href="{% url 'projects:settings' pk=project.pk %}" class="btn btn-ghost btn-sm" style="color:var(--accent);border-color:var(--accent)">⚙</a>
+{% endblock %}
+{% block content %}
+<div style="max-width:620px">
+<form method="post">
+{% csrf_token %}
+<div class="card fade-up" style="margin-bottom:14px">
+  <div class="section-title" style="margin-bottom:18px">Informações Gerais</div>
+  <div class="form-group"><label class="form-label">Nome</label><input type="text" name="name" class="form-control" value="{{ project.name }}"></div>
+  <div class="form-group"><label class="form-label">Descrição</label><textarea name="description" class="form-control" rows="3">{{ project.description }}</textarea></div>
+  <div class="form-grid-2">
+    <div class="form-group"><label class="form-label">Status</label><select name="status" class="form-control"><option value="active" {% if project.status == 'active' %}selected{% endif %}>Ativo</option><option value="on_hold" {% if project.status == 'on_hold' %}selected{% endif %}>Em Pausa</option><option value="completed" {% if project.status == 'completed' %}selected{% endif %}>Concluído</option><option value="archived" {% if project.status == 'archived' %}selected{% endif %}>Arquivado</option></select></div>
+    <div class="form-group"><label class="form-label">Cor</label><input type="color" name="color" value="{{ project.color }}" class="form-control" style="height:42px;padding:4px"></div>
+    <div class="form-group"><label class="form-label">Início</label><input type="date" name="start_date" class="form-control" value="{{ project.start_date|date:'Y-m-d'|default:'' }}"></div>
+    <div class="form-group"><label class="form-label">Prazo</label><input type="date" name="due_date" class="form-control" value="{{ project.due_date|date:'Y-m-d'|default:'' }}"></div>
+    <div class="form-group">
+      <label class="form-label">Cidade</label>
+      <select name="cidade" class="form-control">
+        <option value="" {% if not project.cidade %}selected{% endif %}>— Sem cidade —</option>
+        <option value="londrina" {% if project.cidade == 'londrina' %}selected{% endif %}>Londrina</option>
+        <option value="itu" {% if project.cidade == 'itu' %}selected{% endif %}>Itu</option>
+      </select>
+    </div>
+  </div>
+</div>
+<div class="card fade-up" style="margin-bottom:14px">
+  <div class="section-title" style="margin-bottom:14px">Membros da Equipe</div>
+  <select name="members" class="form-control" multiple size="6">
+    {% for u in all_users %}<option value="{{ u.id }}" {% if u in project.members.all %}selected{% endif %}>{{ u.get_full_name|default:u.username }} ({{ u.get_role_display }})</option>{% endfor %}
+  </select>
+  <div class="form-hint">Segure Ctrl para selecionar múltiplos</div>
+</div>
+<div style="display:flex;gap:10px">
+  <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+  <a href="{% url 'projects:kanban' pk=project.pk %}" class="btn btn-ghost">Cancelar</a>
+</div>
+</form>
+
+<!-- Zona de Perigo -->
+<div class="card fade-up" style="margin-top:14px;border-color:rgba(255,107,107,0.3);background:rgba(255,107,107,0.03)">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--coral)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <div class="section-title" style="color:var(--coral)">Zona de Perigo</div>
+  </div>
+  <p style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.5">
+    Excluir o projeto remove permanentemente todas as tarefas, colunas, comentários e documentos associados. <strong>Esta ação não pode ser desfeita.</strong>
+  </p>
+  <button type="button" class="btn btn-danger" onclick="document.getElementById('delete-modal').classList.add('open')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+    Excluir Projeto
+  </button>
+</div>
+</div>
+
+<!-- Modal de confirmação de exclusão -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal-box" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title" style="color:var(--coral)">Excluir Projeto</div>
+      <button class="modal-close" onclick="document.getElementById('delete-modal').classList.remove('open')">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:6px">
+      Tem certeza que deseja excluir o projeto <strong>{{ project.name }}</strong>?
+    </p>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:20px">
+      Todas as tarefas, colunas, comentários e documentos serão removidos permanentemente.
+    </p>
+    <div style="display:flex;gap:8px">
+      <form method="post" action="{% url 'projects:delete' pk=project.pk %}" style="flex:1">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger" style="width:100%">Sim, excluir permanentemente</button>
+      </form>
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('delete-modal').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
+</div>
+<script>
+document.getElementById('delete-modal').addEventListener('click', function(e){ if(e.target===this) this.classList.remove('open'); });
+</script>
+{% endblock %}

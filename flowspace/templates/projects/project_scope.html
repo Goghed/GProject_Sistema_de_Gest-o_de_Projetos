@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} — Documentos{% endblock %}
+
+{% block topbar_left %}
+<div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:2px">
+    <a href="{% url 'projects:dashboard' %}" style="color:var(--text3)">Projetos</a> /
+    <a href="{% url 'projects:kanban' pk=project.pk %}" style="color:var(--text3)">{{ project.name }}</a> /
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div style="width:10px;height:10px;border-radius:50%;background:{{ project.color }}"></div>
+    <div class="topbar-title">Documentos</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block topbar_actions %}
+<div class="view-pills">
+  <a href="{% url 'projects:kanban' pk=project.pk %}" class="vpill">⊞ Kanban</a>
+  <a href="{% url 'projects:timeline' pk=project.pk %}" class="vpill">◷ Timeline</a>
+  <a href="{% url 'projects:task_list' pk=project.pk %}" class="vpill">≡ Lista</a>
+  <a href="{% url 'projects:project_scope' project.id %}" class="vpill active">📁 Docs</a>
+</div>
+<a href="{% url 'projects:settings' pk=project.pk %}" class="btn btn-ghost btn-sm">⚙</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+.scope-wrapper{max-width:900px;margin:auto;display:flex;flex-direction:column;gap:20px}
+
+/* Members strip */
+.members-strip{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:14px 20px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow)}
+.members-strip-label{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+.members-avatars{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;flex:1}
+.member-av-wrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px}
+.member-av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;border:2px solid var(--white);box-shadow:0 0 0 1.5px var(--border);cursor:default;transition:transform .15s}
+.member-av:hover{transform:scale(1.1)}
+.member-av-name{font-size:9px;color:var(--text3);white-space:nowrap;max-width:42px;overflow:hidden;text-overflow:ellipsis;text-align:center}
+.online-dot{position:absolute;bottom:19px;right:-1px;width:10px;height:10px;border-radius:50%;border:2px solid var(--white)}
+.online-dot.online{background:#34d399;animation:pls 2s infinite}
+.online-dot.offline{background:rgba(119,119,170,.4)}
+.online-summary{font-size:11px;color:var(--text3);white-space:nowrap;display:flex;align-items:center;gap:5px}
+
+/* Upload card */
+.upload-card{background:var(--white);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+.upload-card-header{padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.upload-card-icon{width:38px;height:38px;border-radius:11px;background:rgba(91,76,245,.1);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.upload-card-title{font-family:var(--syne);font-size:15px;font-weight:700;color:var(--text)}
+.upload-card-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.upload-card-body{padding:22px;display:flex;flex-direction:column;gap:18px}
+
+/* Drop zone */
+.drop-zone{border:2px dashed var(--border2);border-radius:12px;padding:30px 20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface);position:relative}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);background:rgba(91,76,245,.04)}
+.drop-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-icon{font-size:30px;margin-bottom:8px;display:block}
+.drop-label{font-size:13px;font-weight:600;color:var(--text2);margin-bottom:4px}
+.drop-hint{font-size:11px;color:var(--text3)}
+.drop-accent{color:var(--accent);font-weight:700}
+
+/* File preview */
+.file-preview{display:none;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;align-items:center;gap:12px}
+.file-preview.show{display:flex}
+.preview-thumb{width:54px;height:54px;border-radius:9px;object-fit:cover;flex-shrink:0;border:1px solid var(--border)}
+.preview-thumb-icon{width:54px;height:54px;border-radius:9px;background:var(--white);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0}
+.preview-info{flex:1;min-width:0}
+.preview-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.preview-size{font-size:11px;color:var(--text3);margin-top:2px}
+.preview-type{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
+.preview-remove{width:28px;height:28px;border-radius:50%;background:rgba(255,107,107,.1);border:none;color:var(--coral);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+.preview-remove:hover{background:rgba(255,107,107,.22)}
+
+/* Fields */
+.scope-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.scope-fields .full{grid-column:1 / -1}
+.field-label{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:5px;display:block;letter-spacing:.01em}
+.field-input{width:100%;padding:9px 12px;border:1px solid var(--border2);border-radius:9px;font-size:13px;font-family:var(--dm);background:var(--surface2);color:var(--text);outline:none;transition:border .15s,box-shadow .15s}
+.field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,76,245,.10);background:var(--white)}
+textarea.field-input{resize:vertical;min-height:72px}
+
+.submit-row{display:flex;align-items:center;gap:12px;padding-top:6px;border-top:1px solid var(--border)}
+.form-status-msg{font-size:11px;color:var(--text3)}
+
+/* Docs list */
+.docs-card{background:var(--white);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+.docs-card-header{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.docs-card-title{font-family:var(--syne);font-size:14px;font-weight:700;color:var(--text)}
+.docs-count-badge{font-size:11px;font-weight:600;color:var(--text3);background:var(--surface2);padding:2px 9px;border-radius:20px}
+
+.doc-row{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid var(--border);transition:background .12s}
+.doc-row:last-child{border-bottom:none}
+.doc-row:hover{background:rgba(91,76,245,.02)}
+.doc-type-ico{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.doc-info{flex:1;min-width:0}
+.doc-title{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doc-meta{font-size:11px;color:var(--text3);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap}
+.doc-actions{display:flex;gap:6px;flex-shrink:0}
+
+.empty-docs{text-align:center;padding:48px 20px;color:var(--text3)}
+.empty-docs-icon{font-size:40px;margin-bottom:10px;display:block;opacity:.45}
+.empty-docs-text{font-size:13px;line-height:1.6}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="scope-wrapper">
+
+  <!-- Capa do projeto -->
+  {% if project.cover_image %}
+  <div style="border-radius:var(--radius-lg);overflow:hidden;height:180px;position:relative;box-shadow:var(--shadow-md)">
+    <img src="{{ project.cover_image.url }}" alt="Capa" style="width:100%;height:100%;object-fit:cover">
+    <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(10,10,20,.6) 0%,transparent 50%)"></div>
+    <div style="position:absolute;bottom:16px;left:20px;display:flex;align-items:center;gap:10px">
+      <div style="width:12px;height:12px;border-radius:50%;background:{{ project.color }}"></div>
+      <span style="font-family:var(--syne);font-size:20px;font-weight:800;color:#fff;letter-spacing:-.5px">{{ project.name }}</span>
+      <span class="badge badge-{{ project.status }}">{{ project.get_status_display }}</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Escopo do projeto -->
+  {% if project.scope %}
+  <div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px 22px;box-shadow:var(--shadow)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <span style="font-size:16px">📝</span>
+      <span style="font-family:var(--syne);font-size:14px;font-weight:800;color:var(--text)">Escopo do Projeto</span>
+    </div>
+    <div style="font-size:13px;color:var(--text2);line-height:1.8;white-space:pre-wrap">{{ project.scope }}</div>
+  </div>
+  {% endif %}
+
+  <!-- Membros e atividades -->
+  <div class="members-strip" style="flex-direction:column;align-items:flex-start;gap:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+      <span class="members-strip-label">👥 Membros do projeto</span>
+      <div class="online-summary">
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#34d399;animation:pls 2s infinite"></span>
+        <span id="online-count">1</span> online
+      </div>
+    </div>
+    <div class="members-avatars" style="width:100%">
+      {% for member in project.members.all %}
+      {% with activity=project.member_activities.all %}
+      <div class="member-av-wrap" style="align-items:flex-start;flex-direction:row;gap:10px;width:100%;padding:6px 0;border-bottom:1px solid var(--border)" title="{{ member.get_full_name|default:member.username }}">
+        <div style="position:relative;flex-shrink:0">
+          {% if member.photo %}
+          <img src="{{ member.photo.url }}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid var(--white);box-shadow:0 0 0 1.5px var(--border)">
+          {% else %}
+          <div class="member-av" style="background:{{ member.avatar_color }}">{{ member.initials }}</div>
+          {% endif %}
+          <span class="online-dot {% if member == request.user %}online{% else %}offline{% endif %}" data-uid="{{ member.id }}"></span>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">{{ member.get_full_name|default:member.username }}</div>
+          <div style="font-size:11px;color:var(--text3)">{{ member.get_role_display }}{% if member.job_title %} · {{ member.job_title }}{% endif %}</div>
+          {% for ma in project.member_activities.all %}
+          {% if ma.user == member and ma.activity %}
+          <div style="font-size:12px;color:var(--accent);margin-top:3px">↳ {{ ma.activity }}</div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endwith %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Upload form -->
+  <div class="upload-card">
+    <div class="upload-card-header">
+      <div class="upload-card-icon">📁</div>
+      <div>
+        <div class="upload-card-title">Enviar Documento</div>
+        <div class="upload-card-sub">Anexe arquivos, apresentações, contratos ou qualquer documento do projeto</div>
+      </div>
+    </div>
+
+    <div class="upload-card-body">
+      <form method="POST" enctype="multipart/form-data" id="upload-form">
+        {% csrf_token %}
+
+        <!-- Drop zone -->
+        <div class="drop-zone" id="drop-zone">
+          <input type="file" name="file" id="file-input" required>
+          <span class="drop-icon">☁️</span>
+          <div class="drop-label">Arraste um arquivo ou <span class="drop-accent">clique para selecionar</span></div>
+          <div class="drop-hint">PDF, DOCX, XLSX, imagens e muito mais · Máx. 50 MB</div>
+        </div>
+
+        <!-- File preview -->
+        <div class="file-preview" id="file-preview">
+          <img id="preview-img" class="preview-thumb" src="" alt="" style="display:none">
+          <div id="preview-icon" class="preview-thumb-icon" style="display:none"></div>
+          <div class="preview-info">
+            <div class="preview-name" id="preview-name"></div>
+            <div class="preview-size" id="preview-size"></div>
+            <div class="preview-type" id="preview-type"></div>
+          </div>
+          <button type="button" class="preview-remove" id="remove-file">✕</button>
+        </div>
+
+        <!-- Fields -->
+        <div class="scope-fields">
+          <div>
+            <label class="field-label" for="id_title">Título do documento *</label>
+            <input type="text" name="title" id="id_title" class="field-input"
+                   placeholder="Ex: Contrato de prestação de serviço" required>
+          </div>
+          <div>
+            <label class="field-label" style="color:var(--text3)">Tipo detectado</label>
+            <div class="field-input" id="detected-type"
+                 style="background:var(--surface2);color:var(--text3);cursor:default;display:flex;align-items:center;gap:6px">
+              Selecione um arquivo acima
+            </div>
+          </div>
+          <div class="full">
+            <label class="field-label" for="id_description">
+              Descrição <span style="font-weight:400;color:var(--text3)">(opcional)</span>
+            </label>
+            <textarea name="description" id="id_description" class="field-input"
+                      placeholder="Descreva o conteúdo ou finalidade deste documento..."></textarea>
+          </div>
+        </div>
+
+        <div class="submit-row">
+          <button type="submit" class="btn btn-primary" id="submit-btn" disabled>
+            ⬆ &nbsp;Enviar Documento
+          </button>
+          <span class="form-status-msg" id="form-status">Selecione um arquivo para continuar</span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Docs list -->
+  <div class="docs-card">
+    <div class="docs-card-header">
+      <div class="docs-card-title">📄 Documentos do Projeto</div>
+      <span class="docs-count-badge">{{ documents.count }} arquivo{{ documents.count|pluralize:"s" }}</span>
+    </div>
+
+    {% if documents %}
+      {% for doc in documents %}
+      {% with ext=doc.file.name|lower %}
+      <div class="doc-row">
+        <div class="doc-type-ico" style="background:{{ project.color }}15">
+          {% if ".pdf" in ext %}📄
+          {% elif ".doc" in ext %}📝
+          {% elif ".xls" in ext %}📊
+          {% elif ".ppt" in ext %}📑
+          {% elif ".png" in ext or ".jpg" in ext or ".jpeg" in ext or ".gif" in ext or ".webp" in ext %}🖼
+          {% elif ".zip" in ext or ".rar" in ext %}🗜
+          {% elif ".mp4" in ext or ".mov" in ext %}🎬
+          {% elif ".mp3" in ext or ".wav" in ext %}🎵
+          {% elif ".csv" in ext %}📋
+          {% elif ".txt" in ext or ".md" in ext %}📃
+          {% else %}📎{% endif %}
+        </div>
+        <div class="doc-info">
+          <div class="doc-title">{{ doc.title }}</div>
+          <div class="doc-meta">
+            <span>🕐 {{ doc.created_at|date:"d/m/Y · H:i" }}</span>
+            {% if doc.uploaded_by %}
+            <span>👤 {{ doc.uploaded_by.get_full_name|default:doc.uploaded_by.username }}</span>
+            {% endif %}
+            {% if doc.description %}
+            <span title="{{ doc.description }}">💬 {{ doc.description|truncatechars:50 }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="doc-actions">
+          <a href="{% url 'projects:document_download' doc_id=doc.pk %}" target="_blank" class="btn btn-ghost btn-sm">↗ Abrir</a>
+          <a href="{% url 'projects:document_download' doc_id=doc.pk %}" download class="btn btn-ghost btn-sm" title="Baixar">⬇</a>
+        </div>
+      </div>
+      {% endwith %}
+      {% endfor %}
+    {% else %}
+      <div class="empty-docs">
+        <span class="empty-docs-icon">📂</span>
+        <div class="empty-docs-text">
+          Nenhum documento enviado ainda.<br>Faça o upload do primeiro arquivo acima!
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── File type map ─────────────────────────────────────────────────────────────
+const FILE_TYPES = {
+  pdf:  {icon:'📄', label:'Documento PDF',    color:'#dc2626'},
+  doc:  {icon:'📝', label:'Word',             color:'#2563eb'},
+  docx: {icon:'📝', label:'Word',             color:'#2563eb'},
+  xls:  {icon:'📊', label:'Excel',            color:'#059669'},
+  xlsx: {icon:'📊', label:'Excel',            color:'#059669'},
+  ppt:  {icon:'📑', label:'PowerPoint',       color:'#ea580c'},
+  pptx: {icon:'📑', label:'PowerPoint',       color:'#ea580c'},
+  png:  {icon:'🖼', label:'Imagem PNG',       color:'#7c3aed'},
+  jpg:  {icon:'🖼', label:'Imagem JPG',       color:'#7c3aed'},
+  jpeg: {icon:'🖼', label:'Imagem JPEG',      color:'#7c3aed'},
+  gif:  {icon:'🖼', label:'GIF animado',      color:'#7c3aed'},
+  webp: {icon:'🖼', label:'Imagem WebP',      color:'#7c3aed'},
+  zip:  {icon:'🗜', label:'Arquivo ZIP',      color:'#b45309'},
+  rar:  {icon:'🗜', label:'Arquivo RAR',      color:'#b45309'},
+  mp4:  {icon:'🎬', label:'Vídeo MP4',        color:'#0ea5e9'},
+  mov:  {icon:'🎬', label:'Vídeo QuickTime',  color:'#0ea5e9'},
+  mp3:  {icon:'🎵', label:'Áudio MP3',        color:'#a855f7'},
+  wav:  {icon:'🎵', label:'Áudio WAV',        color:'#a855f7'},
+  csv:  {icon:'📋', label:'CSV / Planilha',   color:'#059669'},
+  txt:  {icon:'📃', label:'Texto simples',    color:'#64748b'},
+  md:   {icon:'📃', label:'Markdown',         color:'#64748b'},
+};
+
+function fmtBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+const dropZone    = document.getElementById('drop-zone');
+const fileInput   = document.getElementById('file-input');
+const preview     = document.getElementById('file-preview');
+const previewImg  = document.getElementById('preview-img');
+const previewIco  = document.getElementById('preview-icon');
+const previewName = document.getElementById('preview-name');
+const previewSize = document.getElementById('preview-size');
+const previewType = document.getElementById('preview-type');
+const removeBtn   = document.getElementById('remove-file');
+const submitBtn   = document.getElementById('submit-btn');
+const formStatus  = document.getElementById('form-status');
+const detectedType= document.getElementById('detected-type');
+const titleInput  = document.getElementById('id_title');
+
+function applyFile(file) {
+  const ext  = (file.name.split('.').pop() || '').toLowerCase();
+  const info = FILE_TYPES[ext] || {icon:'📎', label: (ext.toUpperCase() || 'Arquivo'), color:'#5b4cf5'};
+
+  previewName.textContent = file.name;
+  previewSize.textContent = fmtBytes(file.size);
+  previewType.textContent = info.label;
+  previewType.style.color = info.color;
+  detectedType.innerHTML  = info.icon + ' <span style="color:' + info.color + ';font-weight:600">' + info.label + '</span>';
+
+  const isImg = ['png','jpg','jpeg','gif','webp'].includes(ext);
+  if (isImg) {
+    const fr = new FileReader();
+    fr.onload = e => {
+      previewImg.src = e.target.result;
+      previewImg.style.display = 'block';
+      previewIco.style.display = 'none';
+    };
+    fr.readAsDataURL(file);
+  } else {
+    previewIco.textContent   = info.icon;
+    previewIco.style.display = 'flex';
+    previewImg.style.display = 'none';
+  }
+
+  preview.classList.add('show');
+  dropZone.style.display = 'none';
+  submitBtn.disabled      = false;
+  formStatus.textContent  = '✓ Arquivo pronto para envio';
+  formStatus.style.color  = 'var(--green)';
+
+  if (!titleInput.value.trim()) {
+    titleInput.value = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+    titleInput.focus();
+    titleInput.select();
+  }
+}
+
+fileInput.addEventListener('change', e => { if (e.target.files[0]) applyFile(e.target.files[0]); });
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) {
+    try { const dt = new DataTransfer(); dt.items.add(f); fileInput.files = dt.files; } catch(_) {}
+    applyFile(f);
+  }
+});
+
+removeBtn.addEventListener('click', () => {
+  fileInput.value = '';
+  preview.classList.remove('show');
+  dropZone.style.display = '';
+  submitBtn.disabled  = true;
+  formStatus.textContent = 'Selecione um arquivo para continuar';
+  formStatus.style.color = '';
+  detectedType.innerHTML = 'Selecione um arquivo acima';
+  detectedType.style.color = '';
+});
+
+// ── Online presence (server-side heartbeat) ───────────────────────────────────
+const MY_UID   = '{{ request.user.id }}';
+const CSRF_TOK = '{{ csrf_token }}';
+let   onlineSet = new Set([MY_UID]);
+
+async function sendHeartbeat() {
+  try {
+    await fetch('/api/presence/heartbeat/', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': CSRF_TOK, 'Content-Type': 'application/json' },
+    });
+  } catch(_) {}
+}
+
+async function fetchOnline() {
+  try {
+    const r = await fetch('/api/presence/online/');
+    if (!r.ok) return;
+    const d = await r.json();
+    onlineSet = new Set(d.online || []);
+    refreshDots();
+  } catch(_) {}
+}
+
+function refreshDots() {
+  const dots = document.querySelectorAll('.online-dot[data-uid]');
+  let n = 0;
+  dots.forEach(d => {
+    const on = onlineSet.has(d.dataset.uid);
+    d.classList.toggle('online',  on);
+    d.classList.toggle('offline', !on);
+    if (on) n++;
+  });
+  const el = document.getElementById('online-count');
+  if (el) el.textContent = n;
+}
+
+sendHeartbeat();
+fetchOnline();
+setInterval(sendHeartbeat, 20000);
+setInterval(fetchOnline,   5000);
+</script>
+{% endblock %}

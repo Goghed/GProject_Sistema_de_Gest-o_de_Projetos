@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% block title %}Relatório Diário — {{ task.title }}{% endblock %}
+{% block page_title %}Relatório Diário{% endblock %}
+
+{% block extra_head %}
+<style>
+.dr-hero {
+  background: var(--ink); border-radius: var(--radius-lg);
+  padding: 20px 24px; margin-bottom: 20px; color: #fff;
+  display: flex; align-items: flex-start; gap: 14px;
+}
+.dr-hero-icon { font-size: 28px; flex-shrink: 0; margin-top: 2px; }
+.dr-hero-label { font-size: 10px; color: rgba(255,255,255,0.4); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 3px; }
+.dr-hero-title { font-family: var(--syne); font-size: 17px; font-weight: 800; letter-spacing: -.4px; }
+.dr-hero-meta  { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 4px; }
+
+.summary-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 20px; }
+.summary-card {
+  background: var(--white); border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg); padding: 16px 18px; text-align: center;
+}
+.summary-num   { font-family: var(--syne); font-size: 26px; font-weight: 800; letter-spacing: -.6px; }
+.summary-label { font-size: 11px; color: var(--text3); font-weight: 600; margin-top: 3px; }
+
+.filter-row { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+.filter-chip {
+  padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border2);
+  font-size: 12px; font-weight: 600; color: var(--text2); cursor: pointer;
+  background: var(--white); transition: all .15s; text-decoration: none;
+}
+.filter-chip:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+.filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.day-card {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); border-left: 4px solid var(--amber);
+  margin-bottom: 10px; overflow: hidden; transition: box-shadow .15s;
+}
+.day-card:hover { box-shadow: var(--shadow); }
+.day-card.accomplished  { border-left-color: var(--green); }
+.day-card.not_accomplished { border-left-color: var(--coral); }
+
+.day-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px; cursor: pointer; user-select: none;
+}
+.day-num   { font-family: var(--syne); font-size: 15px; font-weight: 800; color: var(--text); }
+.day-date  { font-size: 11px; color: var(--text3); }
+.day-badge {
+  margin-left: auto; padding: 4px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; border: 1px solid;
+}
+.day-badge.accomplished     { background: rgba(52,211,153,.12); color: #059669; border-color: rgba(52,211,153,.3); }
+.day-badge.not_accomplished { background: rgba(255,107,107,.12); color: #dc2626; border-color: rgba(255,107,107,.3); }
+.day-badge.pending          { background: rgba(251,191,36,.12);  color: #b45309; border-color: rgba(251,191,36,.3); }
+.day-chevron { font-size: 12px; color: var(--text3); margin-left: 8px; transition: transform .2s; }
+.day-chevron.open { transform: rotate(180deg); }
+
+.day-preview {
+  font-size: 12px; color: var(--text2); line-height: 1.5;
+  padding: 0 18px 14px; display: none;
+}
+.day-preview.visible { display: block; }
+
+.day-body { padding: 0 18px 18px; display: none; }
+.day-body.open { display: block; }
+
+.field-label { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 8px; display: block; }
+
+.toggle-row  { display: flex; gap: 8px; margin-bottom: 16px; }
+.toggle-btn  {
+  flex: 1; padding: 11px; border-radius: var(--radius); border: 1.5px solid var(--border2);
+  background: var(--surface2); cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--text2); text-align: center; transition: all .15s;
+}
+.toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
+.toggle-btn.yes.active { background: var(--green); border-color: var(--green); color: #fff; }
+.toggle-btn.no.active  { background: var(--coral); border-color: var(--coral); color: #fff; }
+
+.notes-area {
+  width: 100%; min-height: 90px; resize: vertical;
+  border: 1px solid var(--border2); border-radius: var(--radius);
+  background: var(--surface2); color: var(--text);
+  padding: 10px 12px; font-size: 13px; font-family: var(--dm);
+  outline: none; transition: border .15s;
+}
+.notes-area:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,76,245,.12); }
+
+.save-btn {
+  width: 100%; margin-top: 12px; padding: 12px;
+  background: var(--accent); color: #fff; border: none; border-radius: var(--radius);
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  font-family: var(--dm); transition: all .15s;
+}
+.save-btn:hover { background: var(--accent2); transform: translateY(-1px); }
+.save-btn:disabled { opacity: .55; transform: none; cursor: not-allowed; }
+
+.no-dates-warning {
+  background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.3);
+  border-radius: var(--radius-lg); padding: 20px 24px; text-align: center;
+}
+</style>
+{% endblock %}
+
+{% block topbar_left %}
+<div style="display:flex;align-items:center;gap:10px">
+  <a href="/tasks/{{ task.pk }}/" style="color:var(--text3);font-size:20px;text-decoration:none">←</a>
+  <div>
+    <div style="font-size:11px;color:var(--text3)">
+      <a href="{% url 'projects:kanban' pk=task.project.pk %}" style="color:var(--text3)">{{ task.project.name }}</a>
+      &rsaquo; <a href="/tasks/{{ task.pk }}/" style="color:var(--text3)">Tarefa</a>
+    </div>
+    <div class="topbar-title">Relatório Diário</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="/tasks/{{ task.pk }}/" class="btn btn-ghost btn-sm">Ver Tarefa</a>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:720px;margin:0 auto">
+
+  <!-- Hero -->
+  <div class="dr-hero fade-up">
+    <div class="dr-hero-icon">📋</div>
+    <div>
+      <div class="dr-hero-label">Relatório Diário</div>
+      <div class="dr-hero-title">{{ task.title }}</div>
+      <div class="dr-hero-meta">
+        {{ task.project.name }}
+        {% if task.start_date %} · Início: {{ task.start_date|date:"d/m/Y" }}{% endif %}
+        {% if task.duration_days %} · {{ task.duration_days }} dia{{ task.duration_days|pluralize }}{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if not task.start_date or not task.duration_days %}
+  <div class="no-dates-warning fade-up">
+    <div style="font-size:28px;margin-bottom:10px">⚠️</div>
+    <div style="font-family:var(--syne);font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px">
+      Datas não configuradas
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px">
+      Esta tarefa precisa de <strong>Data de Início</strong> e <strong>Duração em dias</strong> para usar o relatório diário.
+    </div>
+    <a href="/tasks/{{ task.pk }}/" class="btn btn-primary btn-sm">Ir para a tarefa</a>
+  </div>
+
+  {% else %}
+
+  <!-- Resumo -->
+  <div class="summary-grid fade-up">
+    <div class="summary-card">
+      <div class="summary-num" style="color:var(--green)">{{ accomplished_count }}</div>
+      <div class="summary-label">Realizados</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-num" style="color:var(--coral)">{{ not_accomplished_count }}</div>
+      <div class="summary-label">Não realizados</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-num" style="color:var(--amber)">{{ pending_count }}</div>
+      <div class="summary-label">Pendentes</div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="filter-row">
+    <a href="?" class="filter-chip {% if not request.GET.filter %}active{% endif %}">Todos</a>
+    <a href="?filter=accomplished" class="filter-chip {% if request.GET.filter == 'accomplished' %}active{% endif %}">✓ Realizados</a>
+    <a href="?filter=not_accomplished" class="filter-chip {% if request.GET.filter == 'not_accomplished' %}active{% endif %}">✗ Não realizados</a>
+    <a href="?filter=pending" class="filter-chip {% if request.GET.filter == 'pending' %}active{% endif %}">· Pendentes</a>
+  </div>
+
+  <!-- Cards por dia -->
+  {% for slot in day_slots %}
+  {% with filter=request.GET.filter %}
+  {% if not filter or filter == 'accomplished' and slot.accomplished == True or filter == 'not_accomplished' and slot.accomplished == False or filter == 'pending' and slot.accomplished == None %}
+
+  {% if slot.accomplished == True %}
+    {% with card_class="accomplished" badge_class="accomplished" badge_label="✓ Realizado" %}
+    {% include "tasks/_day_card.html" %}
+    {% endwith %}
+  {% elif slot.accomplished == False %}
+    {% with card_class="not_accomplished" badge_class="not_accomplished" badge_label="✗ Não realizado" %}
+    {% include "tasks/_day_card.html" %}
+    {% endwith %}
+  {% else %}
+    {% with card_class="" badge_class="pending" badge_label="· Pendente" %}
+    {% include "tasks/_day_card.html" %}
+    {% endwith %}
+  {% endif %}
+
+  {% endif %}
+  {% endwith %}
+  {% empty %}
+  <div style="text-align:center;padding:48px 0;color:var(--text3)">
+    <div style="font-size:36px;margin-bottom:12px">📋</div>
+    <div style="font-size:14px;font-weight:700">Nenhum dia encontrado neste filtro</div>
+  </div>
+  {% endfor %}
+
+  {% endif %}
+</div>
+
+<!-- Day card inline (avoiding include overhead) -->
+<script>
+const TASK_PK = "{{ task.pk }}";
+
+function toggleDay(dayNum) {
+  const body    = document.getElementById('day-body-' + dayNum);
+  const chevron = document.getElementById('chev-' + dayNum);
+  const preview = document.getElementById('preview-' + dayNum);
+  const isOpen  = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  chevron.classList.toggle('open', !isOpen);
+  if (preview) preview.classList.toggle('visible', isOpen);
+}
+
+function setAccomplished(dayNum, val) {
+  const yesBtn = document.getElementById('yes-' + dayNum);
+  const noBtn  = document.getElementById('no-' + dayNum);
+  yesBtn.classList.toggle('active', val === true);
+  noBtn.classList.toggle('active',  val === false);
+  yesBtn.dataset.val = val === true  ? 'true'  : '';
+  noBtn.dataset.val  = val === false ? 'false' : '';
+
+  const card = document.getElementById('day-card-' + dayNum);
+  card.classList.remove('accomplished','not_accomplished');
+  if (val === true)  card.classList.add('accomplished');
+  if (val === false) card.classList.add('not_accomplished');
+}
+
+async function saveDay(dayNum) {
+  const yesBtn = document.getElementById('yes-' + dayNum);
+  const noBtn  = document.getElementById('no-' + dayNum);
+  const notes  = document.getElementById('notes-' + dayNum).value;
+  const saveBtn = document.getElementById('save-' + dayNum);
+  const badge   = document.getElementById('badge-' + dayNum);
+
+  let accomplished = null;
+  if (yesBtn.classList.contains('active'))  accomplished = true;
+  if (noBtn.classList.contains('active'))   accomplished = false;
+
+  if (accomplished === null) {
+    alert('Selecione se a atividade foi realizada ou não.');
+    return;
+  }
+
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Salvando...';
+
+  try {
+    const res  = await fetch(`/tasks/${TASK_PK}/daily-report/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token }}',
+      },
+      body: JSON.stringify({ day: dayNum, accomplished, notes }),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      saveBtn.textContent = '✓ Salvo!';
+      badge.textContent    = data.accomplished === true ? '✓ Realizado'
+                           : data.accomplished === false ? '✗ Não realizado'
+                           : '· Pendente';
+      badge.className = 'day-badge ' + (data.accomplished === true ? 'accomplished' : data.accomplished === false ? 'not_accomplished' : 'pending');
+
+      const preview = document.getElementById('preview-' + dayNum);
+      if (preview && notes.trim()) { preview.textContent = notes; }
+
+      setTimeout(() => { saveBtn.textContent = 'Salvar Relatório'; saveBtn.disabled = false; }, 2000);
+    } else {
+      alert(data.error || 'Erro ao salvar.');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Salvar Relatório';
+    }
+  } catch {
+    alert('Erro de rede. Tente novamente.');
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Salvar Relatório';
+  }
+}
+</script>
+
+{% endblock %}

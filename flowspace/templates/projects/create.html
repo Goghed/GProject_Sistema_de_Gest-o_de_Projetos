@@ -1,0 +1,489 @@
+{% extends "base.html" %}
+{% block title %}Novo Projeto — G Project{% endblock %}
+{% block page_title %}Criar Projeto{% endblock %}
+
+{% block extra_head %}
+<style>
+.create-layout { display: grid; grid-template-columns: 1fr 360px; gap: 20px; max-width: 1000px; margin: 0 auto; }
+
+/* Seção */
+.section-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 16px; overflow: hidden; }
+.section-header { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.section-icon { width: 32px; height: 32px; border-radius: 9px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+.section-body { padding: 20px; }
+
+/* Cover upload */
+.cover-drop {
+  border: 2px dashed var(--border2); border-radius: var(--radius-lg);
+  min-height: 160px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px;
+  cursor: pointer; transition: all .2s; position: relative; overflow: hidden;
+  background: var(--surface2);
+}
+.cover-drop:hover { border-color: var(--accent); background: rgba(91,76,245,.04); }
+.cover-drop.has-image { border-style: solid; border-color: var(--border); }
+.cover-drop img { width: 100%; height: 160px; object-fit: cover; display: block; }
+.cover-drop .cover-overlay {
+  position: absolute; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .2s; font-size: 22px; color: #fff;
+}
+.cover-drop:hover .cover-overlay { opacity: 1; }
+.cover-hint { font-size: 12px; color: var(--text3); text-align: center; }
+
+/* Scope textarea */
+.scope-area {
+  width: 100%; min-height: 160px; resize: vertical;
+  border: 1px solid var(--border2); border-radius: var(--radius);
+  background: var(--surface2); color: var(--text);
+  padding: 12px 14px; font-size: 13px; font-family: var(--dm); line-height: 1.6;
+  outline: none; transition: border .15s;
+}
+.scope-area:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,76,245,.1); }
+
+/* File upload zone */
+.file-drop {
+  border: 2px dashed var(--border2); border-radius: var(--radius);
+  padding: 20px; text-align: center; cursor: pointer;
+  transition: all .15s; background: var(--surface2);
+}
+.file-drop:hover { border-color: var(--accent); background: rgba(91,76,245,.04); }
+.file-drop.drag-over { border-color: var(--accent); background: rgba(91,76,245,.08); }
+
+.file-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; background: var(--surface2); border-radius: var(--radius);
+  margin-top: 10px; animation: fadeUp .2s ease both;
+}
+.file-item-icon { font-size: 20px; flex-shrink: 0; }
+.file-item-name { font-size: 12px; font-weight: 600; color: var(--text); flex: 1; word-break: break-all; }
+.file-item-size { font-size: 10px; color: var(--text3); white-space: nowrap; }
+.file-item-remove { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 14px; padding: 0; transition: color .15s; }
+.file-item-remove:hover { color: var(--coral); }
+.file-title-input { font-size: 11px; background: transparent; border: none; border-bottom: 1px solid var(--border2); color: var(--text2); width: 100%; outline: none; padding: 2px 0; margin-top: 2px; }
+.file-title-input:focus { border-bottom-color: var(--accent); }
+
+/* Member row */
+.member-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+  animation: fadeUp .2s ease both;
+}
+.member-row:last-child { border-bottom: none; }
+.member-activity-input {
+  flex: 1; font-size: 12px; background: var(--surface2);
+  border: 1px solid var(--border2); border-radius: var(--radius);
+  padding: 6px 10px; color: var(--text); outline: none; font-family: var(--dm);
+  transition: border .15s;
+}
+.member-activity-input:focus { border-color: var(--accent); }
+.member-remove { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 14px; flex-shrink: 0; transition: color .15s; }
+.member-remove:hover { color: var(--coral); }
+
+/* Sidebar sticky */
+.create-sidebar { position: sticky; top: 20px; }
+
+/* Step indicator */
+.step-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 20px; }
+.step-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius); font-size: 12px; color: var(--text3); cursor: pointer; transition: all .14s; text-decoration: none; }
+.step-item:hover { background: var(--surface2); color: var(--text2); }
+.step-item.active { background: rgba(91,76,245,.1); color: var(--accent); font-weight: 600; }
+.step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.step-item.active .step-num { background: var(--accent); color: #fff; }
+
+/* Preview card */
+.preview-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.preview-cover { height: 80px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 28px; position: relative; overflow: hidden; }
+.preview-cover img { width: 100%; height: 100%; object-fit: cover; }
+.preview-body { padding: 14px 16px; }
+.preview-name { font-family: var(--syne); font-size: 14px; font-weight: 800; color: var(--text); margin-bottom: 4px; }
+.preview-meta { font-size: 11px; color: var(--text3); }
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="post" enctype="multipart/form-data" id="create-form">
+{% csrf_token %}
+<div class="create-layout">
+
+  <!-- ── Coluna principal ────────────────────────── -->
+  <div>
+
+    <!-- 1. Informações básicas -->
+    <div class="section-card fade-up" id="sec-info">
+      <div class="section-header">
+        <div class="section-icon">📋</div>
+        <div>
+          <div style="font-family:var(--syne);font-size:13px;font-weight:800">Informações do Projeto</div>
+          <div style="font-size:11px;color:var(--text3)">Nome, datas, gestor e cor</div>
+        </div>
+      </div>
+      <div class="section-body">
+
+        <!-- Capa -->
+        <div class="form-group">
+          <label class="form-label">Imagem de Capa</label>
+          <div class="cover-drop" id="cover-drop" onclick="document.getElementById('cover-input').click()">
+            <div id="cover-placeholder" style="text-align:center">
+              <div style="font-size:28px;margin-bottom:6px">🖼</div>
+              <div style="font-size:13px;font-weight:600;color:var(--text2)">Clique para adicionar uma capa</div>
+              <div class="cover-hint">PNG, JPG ou WEBP · Máx. 8MB</div>
+            </div>
+            <img id="cover-preview" src="" alt="" style="display:none;width:100%;height:160px;object-fit:cover">
+            <div class="cover-overlay" id="cover-overlay" style="display:none">📷 Alterar imagem</div>
+          </div>
+          <input type="file" id="cover-input" name="cover_image" accept="image/*" style="display:none" onchange="previewCover(this)">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Nome do Projeto *</label>
+          <input type="text" name="name" id="proj-name" class="form-control" required
+                 placeholder="Ex: Instalação Câmeras Unidade Sul"
+                 oninput="document.getElementById('preview-name').textContent = this.value || 'Nome do projeto'">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descrição</label>
+          <textarea name="description" class="form-control" rows="3"
+                    placeholder="Objetivo, contexto e principais entregáveis..."></textarea>
+        </div>
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label">Data de Início</label>
+            <input type="date" name="start_date" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Prazo Final</label>
+            <input type="date" name="due_date" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Cidade</label>
+            <select name="cidade" class="form-control">
+              <option value="">— Sem cidade —</option>
+              <option value="londrina">Londrina</option>
+              <option value="itu">Itu</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Gestor do Projeto *</label>
+          <select name="manager" class="form-control" required>
+            <option value="">— Selecione o gestor —</option>
+            {% for u in eligible_managers %}
+            <option value="{{ u.id }}">{{ u.get_full_name|default:u.username }} ({{ u.get_role_display }})</option>
+            {% endfor %}
+          </select>
+          <div class="form-hint">O gestor é o único que pode criar e gerenciar tarefas no projeto.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cor do Projeto</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px" id="color-swatches">
+            {% for color, name in colors %}
+            <label style="cursor:pointer">
+              <input type="radio" name="color" value="{{ color }}"
+                     {% if forloop.first %}checked{% endif %} style="display:none">
+              <div class="swatch" data-color="{{ color }}"
+                   style="width:28px;height:28px;border-radius:50%;background:{{ color }};cursor:pointer;
+                          border:{% if forloop.first %}3px solid white;box-shadow:0 0 0 2px {{ color }}{% else %}2px solid transparent{% endif %}"
+                   onclick="selectSwatch(this,'{{ color }}')">
+              </div>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 2. Escopo -->
+    <div class="section-card fade-up" id="sec-scope" style="animation-delay:.05s">
+      <div class="section-header">
+        <div class="section-icon">📝</div>
+        <div>
+          <div style="font-family:var(--syne);font-size:13px;font-weight:800">Escopo do Projeto</div>
+          <div style="font-size:11px;color:var(--text3)">Descreva o que será feito, entregáveis e limites</div>
+        </div>
+      </div>
+      <div class="section-body">
+        <textarea name="scope" class="scope-area"
+          placeholder="Descreva detalhadamente o escopo:&#10;&#10;• O que será feito&#10;• O que está fora do escopo&#10;• Principais entregáveis&#10;• Critérios de aceite&#10;• Restrições e premissas"></textarea>
+        <div class="form-hint" style="margin-top:6px">Este escopo ficará visível para todos os membros do projeto.</div>
+      </div>
+    </div>
+
+    <!-- 3. Arquivos e documentos -->
+    <div class="section-card fade-up" id="sec-files" style="animation-delay:.1s">
+      <div class="section-header">
+        <div class="section-icon">📎</div>
+        <div>
+          <div style="font-family:var(--syne);font-size:13px;font-weight:800">Arquivos e Documentos</div>
+          <div style="font-size:11px;color:var(--text3)">PDFs, imagens e outros documentos do projeto</div>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="file-drop" id="file-drop"
+             onclick="document.getElementById('file-input').click()"
+             ondragover="fileDragOver(event)"
+             ondragleave="fileDragLeave(event)"
+             ondrop="fileDrop(event)">
+          <div style="font-size:24px;margin-bottom:6px">📁</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text2)">Arraste arquivos aqui ou clique para selecionar</div>
+          <div class="cover-hint">PDF, DOC, XLS, PNG, JPG · Máx. 20MB por arquivo</div>
+        </div>
+        <input type="file" id="file-input" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp" style="display:none" onchange="addFiles(this.files)">
+        <div id="file-list"></div>
+      </div>
+    </div>
+
+    <!-- 4. Membros e atividades -->
+    <div class="section-card fade-up" id="sec-members" style="animation-delay:.15s">
+      <div class="section-header">
+        <div class="section-icon">👥</div>
+        <div>
+          <div style="font-family:var(--syne);font-size:13px;font-weight:800">Membros e Atividades</div>
+          <div style="font-size:11px;color:var(--text3)">Defina quem faz o quê no projeto</div>
+        </div>
+      </div>
+      <div class="section-body">
+
+        <!-- Seletor para adicionar membro -->
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <select id="member-select" class="form-control">
+            <option value="">— Selecionar membro para adicionar —</option>
+            {% for u in all_users %}
+            <option value="{{ u.id }}" data-name="{{ u.get_full_name|default:u.username }}" data-role="{{ u.get_role_display }}" data-color="{{ u.avatar_color }}" data-initials="{{ u.initials }}">
+              {{ u.get_full_name|default:u.username }} · {{ u.get_role_display }}
+            </option>
+            {% endfor %}
+          </select>
+          <button type="button" class="btn btn-primary" onclick="addMember()" style="white-space:nowrap">+ Adicionar</button>
+        </div>
+
+        <div id="member-list" style="min-height:40px">
+          <div id="member-empty" style="font-size:12px;color:var(--text3);padding:10px 0">
+            Nenhum membro adicionado ainda. O criador e o gestor são incluídos automaticamente.
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Ações -->
+    <div style="display:flex;gap:10px;padding-bottom:40px">
+      <button type="submit" class="btn btn-primary" style="padding:11px 28px;font-size:14px">Criar Projeto →</button>
+      <a href="{% url 'projects:dashboard' %}" class="btn btn-ghost">Cancelar</a>
+    </div>
+
+  </div>
+
+  <!-- ── Sidebar ────────────────────────────────── -->
+  <div class="create-sidebar">
+
+    <!-- Navegação rápida -->
+    <div class="card" style="margin-bottom:14px;padding:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Seções</div>
+      <div class="step-list">
+        <a href="#sec-info" class="step-item active" onclick="setActive(this)">
+          <div class="step-num">1</div> Informações básicas
+        </a>
+        <a href="#sec-scope" class="step-item" onclick="setActive(this)">
+          <div class="step-num">2</div> Escopo
+        </a>
+        <a href="#sec-files" class="step-item" onclick="setActive(this)">
+          <div class="step-num">3</div> Arquivos
+        </a>
+        <a href="#sec-members" class="step-item" onclick="setActive(this)">
+          <div class="step-num">4</div> Membros
+        </a>
+      </div>
+    </div>
+
+    <!-- Preview do projeto -->
+    <div class="preview-card">
+      <div class="preview-cover" id="preview-cover-wrap">
+        <span id="preview-cover-emoji">🚀</span>
+        <img id="preview-cover-img" src="" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+      </div>
+      <div class="preview-body">
+        <div class="preview-name" id="preview-name">Nome do projeto</div>
+        <div class="preview-meta" id="preview-meta">Sem membros · Sem prazo</div>
+        <div style="margin-top:10px">
+          <div class="progress">
+            <div class="progress-fill" id="preview-color-bar" style="width:0%;background:#5b4cf5"></div>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:4px">0% concluído</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px;padding:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Dicas</div>
+      <ul style="font-size:12px;color:var(--text2);line-height:1.8;padding-left:14px">
+        <li>Defina o escopo antes de convidar membros</li>
+        <li>A atividade de cada membro fica visível no kanban</li>
+        <li>Documentos podem ser adicionados depois também</li>
+        <li>A cor ajuda a identificar o projeto no painel</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+</form>
+
+<script>
+// ── Capa ──────────────────────────────────────────────────────────────────────
+function previewCover(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  if (file.size > 8 * 1024 * 1024) { alert('Imagem muito grande. Máximo 8MB.'); input.value = ''; return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const preview = document.getElementById('cover-preview');
+    const ph      = document.getElementById('cover-placeholder');
+    const overlay = document.getElementById('cover-overlay');
+    const prevImg = document.getElementById('preview-cover-img');
+    const prevEmo = document.getElementById('preview-cover-emoji');
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+    ph.style.display = 'none';
+    overlay.style.display = 'flex';
+    document.getElementById('cover-drop').classList.add('has-image');
+    prevImg.src = e.target.result;
+    prevImg.style.display = 'block';
+    prevEmo.style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Cores ─────────────────────────────────────────────────────────────────────
+function selectSwatch(el, color) {
+  document.querySelectorAll('#color-swatches .swatch').forEach(s => {
+    s.style.border = '2px solid transparent'; s.style.boxShadow = 'none';
+  });
+  el.style.border = '3px solid white';
+  el.style.boxShadow = `0 0 0 2px ${color}`;
+  el.closest('label').querySelector('input').checked = true;
+  document.getElementById('preview-color-bar').style.background = color;
+}
+
+// ── Arquivos ──────────────────────────────────────────────────────────────────
+let fileObjects = [];
+
+function fileDragOver(e) { e.preventDefault(); document.getElementById('file-drop').classList.add('drag-over'); }
+function fileDragLeave()  { document.getElementById('file-drop').classList.remove('drag-over'); }
+function fileDrop(e)      { e.preventDefault(); fileDragLeave(); addFiles(e.dataTransfer.files); }
+
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+function fileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  if (['pdf'].includes(ext)) return '📄';
+  if (['doc','docx'].includes(ext)) return '📝';
+  if (['xls','xlsx'].includes(ext)) return '📊';
+  if (['png','jpg','jpeg','webp','gif'].includes(ext)) return '🖼';
+  return '📎';
+}
+
+function addFiles(files) {
+  for (const file of files) {
+    if (file.size > 20 * 1024 * 1024) { alert(`${file.name}: arquivo muito grande (máx. 20MB).`); continue; }
+    fileObjects.push(file);
+    renderFileList();
+  }
+  // Sync to real input
+  const dt = new DataTransfer();
+  fileObjects.forEach(f => dt.items.add(f));
+  document.getElementById('file-input').files = dt.files;
+}
+
+function removeFile(idx) {
+  fileObjects.splice(idx, 1);
+  renderFileList();
+  const dt = new DataTransfer();
+  fileObjects.forEach(f => dt.items.add(f));
+  document.getElementById('file-input').files = dt.files;
+}
+
+function renderFileList() {
+  const list = document.getElementById('file-list');
+  list.innerHTML = '';
+  fileObjects.forEach((file, i) => {
+    list.innerHTML += `
+    <div class="file-item">
+      <div class="file-item-icon">${fileIcon(file.name)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="file-item-name">${file.name}</div>
+        <input type="text" name="doc_titles" class="file-title-input" placeholder="Título do documento (opcional)" value="${file.name.replace(/\.[^.]+$/, '')}">
+        <input type="hidden" name="doc_descs" value="">
+      </div>
+      <div class="file-item-size">${fmtSize(file.size)}</div>
+      <button type="button" class="file-item-remove" onclick="removeFile(${i})">✕</button>
+    </div>`;
+  });
+}
+
+// ── Membros ───────────────────────────────────────────────────────────────────
+const addedMembers = new Set();
+
+function addMember() {
+  const sel = document.getElementById('member-select');
+  const uid = sel.value;
+  if (!uid) return;
+  if (addedMembers.has(uid)) { sel.value = ''; return; }
+  addedMembers.add(uid);
+
+  const opt   = sel.options[sel.selectedIndex];
+  const name  = opt.dataset.name;
+  const role  = opt.dataset.role;
+  const color = opt.dataset.color;
+  const init  = opt.dataset.initials;
+
+  const empty = document.getElementById('member-empty');
+  if (empty) empty.remove();
+
+  const row = document.createElement('div');
+  row.className = 'member-row';
+  row.id = 'member-' + uid;
+  row.innerHTML = `
+    <input type="hidden" name="members" value="${uid}">
+    <div class="avatar" style="background:${color};flex-shrink:0">${init}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:12px;font-weight:600;color:var(--text)">${name}</div>
+      <div style="font-size:10px;color:var(--text3)">${role}</div>
+      <input type="text" name="member_activities" class="member-activity-input" style="margin-top:5px"
+             placeholder="Atividade neste projeto (ex: Desenvolver a API de autenticação)">
+    </div>
+    <button type="button" class="member-remove" onclick="removeMember('${uid}', this)" title="Remover">✕</button>
+  `;
+  document.getElementById('member-list').appendChild(row);
+  updateMemberPreview();
+  sel.value = '';
+}
+
+function removeMember(uid, btn) {
+  addedMembers.delete(uid);
+  btn.closest('.member-row').remove();
+  updateMemberPreview();
+  if (addedMembers.size === 0) {
+    const list = document.getElementById('member-list');
+    list.innerHTML = '<div id="member-empty" style="font-size:12px;color:var(--text3);padding:10px 0">Nenhum membro adicionado ainda. O criador e o gestor são incluídos automaticamente.</div>';
+  }
+}
+
+function updateMemberPreview() {
+  const count = addedMembers.size;
+  const meta  = document.getElementById('preview-meta');
+  const duePart = meta.textContent.split('·').pop().trim();
+  meta.textContent = (count ? `${count} membro${count > 1 ? 's' : ''}` : 'Sem membros') + ' · ' + duePart;
+}
+
+// ── Nav lateral ───────────────────────────────────────────────────────────────
+function setActive(el) {
+  document.querySelectorAll('.step-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+}
+</script>
+{% endblock %}

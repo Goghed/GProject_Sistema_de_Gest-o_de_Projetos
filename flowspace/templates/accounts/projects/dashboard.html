@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — G Project{% endblock %}
+{% block page_title %}Visão Geral{% endblock %}
+{% block topbar_actions %}
+<a href="{% url 'projects:create' %}" class="btn btn-primary btn-sm">+ Novo Projeto</a>
+{% endblock %}
+{% block content %}
+
+<!-- Stats -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px">
+  <div class="card card-sm fade-up">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Projetos Ativos</div>
+    <div style="font-family:var(--syne);font-size:30px;font-weight:800;letter-spacing:-1px">{{ stats.projects }}</div>
+  </div>
+  <div class="card card-sm fade-up" style="animation-delay:.05s">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Tarefas Abertas</div>
+    <div style="font-family:var(--syne);font-size:30px;font-weight:800;color:var(--accent);letter-spacing:-1px">{{ stats.open_tasks }}</div>
+  </div>
+  <div class="card card-sm fade-up" style="animation-delay:.10s">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Concluídas</div>
+    <div style="font-family:var(--syne);font-size:30px;font-weight:800;color:#34d399;letter-spacing:-1px">{{ stats.done_tasks }}</div>
+  </div>
+  <div class="card card-sm fade-up" style="animation-delay:.15s">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Em Atraso</div>
+    <div style="font-family:var(--syne);font-size:30px;font-weight:800;letter-spacing:-1px;color:{% if stats.overdue %}#dc2626{% else %}#34d399{% endif %}">{{ stats.overdue }}</div>
+  </div>
+</div>
+
+<!-- Timeline + Projetos -->
+<div style="display:grid;grid-template-columns:1fr 320px;gap:16px;margin-bottom:24px">
+  <!-- Timeline -->
+  <div class="card fade-up" style="animation-delay:.2s">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="section-title">Timeline de Projetos</div>
+    </div>
+    <div style="display:flex;border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:12px">
+      {% for m in months %}
+      <div style="flex:1;font-size:10px;font-weight:700;color:{% if m.current %}var(--accent){% else %}var(--text3){% endif %};text-align:center;text-transform:uppercase;letter-spacing:0.06em">{{ m.name }}</div>
+      {% endfor %}
+    </div>
+    {% for proj in projects %}
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <div style="width:110px;font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">{{ proj.name }}</div>
+      <div style="flex:1;height:26px;position:relative">
+        <a href="{% url 'projects:kanban' pk=proj.pk %}">
+          <div style="position:absolute;left:{{ proj.bar_left }}%;width:{{ proj.bar_width }}%;height:100%;border-radius:7px;background:{{ proj.color }};display:flex;align-items:center;padding:0 10px;font-size:10px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;cursor:pointer;transition:filter .15s;min-width:30px">
+            {{ proj.name|truncatechars:16 }}
+          </div>
+        </a>
+      </div>
+    </div>
+    {% empty %}
+    <p style="color:var(--text3);font-size:13px;text-align:center;padding:20px 0">Nenhum projeto com datas definidas.</p>
+    {% endfor %}
+  </div>
+
+  <!-- Projetos -->
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div class="section-title" style="margin-bottom:4px">Seus Projetos</div>
+    {% for proj in projects %}
+    <a href="{% url 'projects:kanban' pk=proj.pk %}" style="text-decoration:none">
+      <div class="card card-sm fade-up" style="cursor:pointer;transition:all .18s;border-left:3px solid {{ proj.color }}"
+           onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-md)'"
+           onmouseout="this.style.transform='';this.style.boxShadow=''">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:600;color:var(--text);flex:1">{{ proj.name }}</div>
+          <span class="badge badge-{{ proj.status }}">{{ proj.get_status_display }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:5px">
+          <span>{{ proj.completed_count }}/{{ proj.task_count }} tarefas</span>
+          <span>{{ proj.progress }}%</span>
+        </div>
+        <div class="progress"><div class="progress-fill" style="width:{{ proj.progress }}%;background:{{ proj.color }}"></div></div>
+      </div>
+    </a>
+    {% empty %}
+    <div class="card card-sm" style="text-align:center;padding:30px 16px">
+      <div style="font-size:28px;margin-bottom:8px">✦</div>
+      <p style="font-size:13px;color:var(--text3)">Nenhum projeto ainda.</p>
+      <a href="{% url 'projects:create' %}" class="btn btn-primary btn-sm" style="margin-top:10px;display:inline-flex">Criar projeto</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Tarefas recentes -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+  <div class="section-title">Tarefas Recentes</div>
+</div>
+<div class="card fade-up" style="animation-delay:.3s">
+  <table class="table">
+    <thead><tr>
+      <th>Tarefa</th><th>Projeto</th><th>Prioridade</th><th>Status</th><th>Prazo</th><th>Responsável</th>
+    </tr></thead>
+    <tbody>
+    {% for task in recent_tasks %}
+    <tr onclick="location.href='{% url 'tasks:detail' pk=task.pk %}'" style="cursor:pointer">
+      <td>
+        <div style="font-weight:500;color:var(--text)">{{ task.title|truncatechars:50 }}</div>
+        {% if task.tag_list %}
+        <div style="margin-top:3px">
+          {% for tag in task.tag_list %}
+          <span style="font-size:10px;background:{{ task.project.color }}18;color:{{ task.project.color }};padding:1px 6px;border-radius:10px;margin-right:3px">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </td>
+      <td>
+        <span style="display:inline-flex;align-items:center;gap:5px">
+          <span style="width:7px;height:7px;border-radius:50%;background:{{ task.project.color }};flex-shrink:0"></span>
+          <span style="font-size:12px;color:var(--text2)">{{ task.project.name }}</span>
+        </span>
+      </td>
+      <td><span class="badge badge-{{ task.priority }}">{{ task.get_priority_display }}</span></td>
+      <td><span class="badge badge-{{ task.status }}">{{ task.get_status_display }}</span></td>
+      <td style="font-size:12px;color:{% if task.due_date and task.due_date < today %}#dc2626{% else %}var(--text2){% endif %}">
+        {{ task.due_date|date:"d/m/Y"|default:"—" }}
+      </td>
+      <td>
+        <div style="display:flex">
+          {% for a in task.assignees.all|slice:":3" %}
+          <div class="avatar" style="background:{{ a.avatar_color }};border:2px solid var(--white);margin-left:-4px;font-size:9px" title="{{ a }}">{{ a.initials }}</div>
+          {% endfor %}
+        </div>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6" style="text-align:center;color:var(--text3);padding:28px">Nenhuma tarefa encontrada.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

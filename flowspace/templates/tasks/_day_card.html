@@ -1,0 +1,34 @@
+<div class="day-card {{ card_class }}" id="day-card-{{ slot.day }}">
+  <div class="day-header" onclick="toggleDay({{ slot.day }})">
+    <div>
+      <div class="day-num">Dia {{ slot.day }}</div>
+      <div class="day-date">{{ slot.date|date:"D, d \d\e M"|lower }}</div>
+    </div>
+    <span class="day-badge {{ badge_class }}" id="badge-{{ slot.day }}">{{ badge_label }}</span>
+    <span class="day-chevron" id="chev-{{ slot.day }}">▼</span>
+  </div>
+
+  {% if slot.notes %}
+  <div class="day-preview" id="preview-{{ slot.day }}">{{ slot.notes }}</div>
+  {% endif %}
+
+  <div class="day-body" id="day-body-{{ slot.day }}">
+    <span class="field-label">A atividade foi realizada?</span>
+    <div class="toggle-row">
+      <button class="toggle-btn yes {% if slot.accomplished == True %}active{% endif %}"
+              id="yes-{{ slot.day }}"
+              onclick="setAccomplished({{ slot.day }}, true)">✓ Sim, realizei</button>
+      <button class="toggle-btn no {% if slot.accomplished == False %}active{% endif %}"
+              id="no-{{ slot.day }}"
+              onclick="setAccomplished({{ slot.day }}, false)">✗ Não foi possível</button>
+    </div>
+
+    <span class="field-label">Relato do dia</span>
+    <textarea class="notes-area" id="notes-{{ slot.day }}"
+      placeholder="{% if slot.accomplished == False %}O que impediu a realização?{% else %}Descreva o que foi feito neste dia...{% endif %}">{{ slot.notes }}</textarea>
+
+    <button class="save-btn" id="save-{{ slot.day }}" onclick="saveDay({{ slot.day }})">
+      Salvar Relatório
+    </button>
+  </div>
+</div>

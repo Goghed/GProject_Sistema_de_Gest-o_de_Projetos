@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Login — G Project</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--accent:#5b4cf5;--accent2:#7c6ffa;--ink:#0a0a0f;--ink2:#13131f;--text:#e8e6ff;--text2:rgba(232,230,255,0.6);--border:rgba(91,76,245,0.25)}
+body{font-family:'DM Sans',sans-serif;background:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+
+/* Animated background */
+.bg-orbs{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);animation:float 8s ease-in-out infinite}
+.orb1{width:400px;height:400px;background:rgba(91,76,245,0.3);top:-100px;left:-100px;animation-delay:0s}
+.orb2{width:300px;height:300px;background:rgba(56,189,248,0.15);bottom:-80px;right:-80px;animation-delay:-3s}
+.orb3{width:250px;height:250px;background:rgba(168,157,247,0.2);top:40%;left:60%;animation-delay:-5s}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(20px,-20px) scale(1.05)}}
+
+/* Grid overlay */
+.bg-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(91,76,245,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(91,76,245,0.04) 1px,transparent 1px);background-size:48px 48px;pointer-events:none}
+
+.login-wrap{position:relative;z-index:10;width:420px;padding:16px}
+
+/* Card */
+.card{background:rgba(19,19,31,0.8);border:1px solid var(--border);border-radius:22px;padding:38px 36px;backdrop-filter:blur(20px);box-shadow:0 24px 80px rgba(0,0,0,0.5),0 0 0 1px rgba(91,76,245,0.1)}
+
+.logo{display:flex;align-items:center;gap:12px;margin-bottom:32px}
+.logo-mark{width:40px;height:40px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#fff;box-shadow:0 0 32px rgba(91,76,245,0.6)}
+.logo-name{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--text);letter-spacing:-0.4px}
+
+h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text);letter-spacing:-0.6px;margin-bottom:6px}
+.subtitle{font-size:13px;color:var(--text2);margin-bottom:28px}
+
+.form-group{margin-bottom:16px}
+label{display:block;font-size:11px;font-weight:600;color:rgba(232,230,255,0.5);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px}
+input{width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(91,76,245,0.2);color:var(--text);border-radius:10px;padding:11px 14px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:all 0.2s}
+input::placeholder{color:rgba(232,230,255,0.25)}
+input:focus{border-color:var(--accent);background:rgba(91,76,245,0.08);box-shadow:0 0 0 3px rgba(91,76,245,0.15)}
+
+.btn-login{width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;transition:all 0.18s;font-family:'DM Sans',sans-serif;letter-spacing:0.01em;box-shadow:0 4px 20px rgba(91,76,245,0.45);margin-top:8px}
+.btn-login:hover{background:var(--accent2);transform:translateY(-1px);box-shadow:0 6px 28px rgba(91,76,245,0.55)}
+.btn-login:active{transform:translateY(0)}
+
+.error{background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.25);color:#fca5a5;border-radius:9px;padding:10px 13px;font-size:13px;margin-bottom:16px}
+
+.demo-hint{margin-top:20px;padding:12px;background:rgba(91,76,245,0.08);border:1px solid rgba(91,76,245,0.15);border-radius:9px;font-size:12px;color:rgba(232,230,255,0.5);text-align:center}
+.demo-hint strong{color:var(--accent2)}
+
+.footer{text-align:center;margin-top:22px;font-size:11px;color:rgba(255,255,255,0.18)}
+</style>
+</head>
+<body>
+<div class="bg-orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+<div class="bg-grid"></div>
+
+<div class="login-wrap">
+  <div class="card">
+    <div class="logo">
+      <div class="logo-mark" style="background:transparent;padding:0;display:flex;align-items:center;justify-content:center;width:46px;height:46px;">
+        <svg viewBox="0 0 100 115" xmlns="http://www.w3.org/2000/svg" width="46" height="46">
+          <path d="M50 2 L95 28 L95 87 L50 113 L5 87 L5 28 Z" fill="#3a2e00" stroke="#f5c200" stroke-width="3"/>
+          <path d="M50 10 L88 32 L88 82 L50 104 L12 82 L12 32 Z" fill="#2a2200"/>
+          <text x="50" y="74" text-anchor="middle" font-family="Arial Black,sans-serif" font-weight="900" font-size="52" fill="#f5c200">G</text>
+        </svg>
+      </div>
+      <div class="logo-name">G Project</div>
+    </div>
+    <h1>Bem-vindo de volta</h1>
+    <p class="subtitle">Entre para gerenciar seus projetos</p>
+
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+    <form method="post" action="{% url 'accounts:login' %}">
+      {% csrf_token %}
+      <div class="form-group">
+        <label>Usuário</label>
+        <input type="text" name="username" placeholder="usuario" autofocus autocomplete="username" required>
+      </div>
+      <div class="form-group">
+        <label>Senha</label>
+        <input type="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn-login">Entrar →</button>
+    </form>
+    
+  </div>
+  <div class="footer">G Project · Gestão de Projetos Profissional</div>
+</div>
+</body>
+</html>

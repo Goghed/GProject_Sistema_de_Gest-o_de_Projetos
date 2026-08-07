@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}Insights — G Project{% endblock %}
+{% block page_title %}Insights{% endblock %}
+{% block topbar_actions %}
+<form method="get" style="display:flex;align-items:center;gap:8px">
+  <select name="project" class="form-control" style="padding:5px 10px;font-size:12px;min-width:180px" onchange="this.form.submit()">
+    <option value="all" {% if selected_pk == 'all' %}selected{% endif %}>Todos os Projetos</option>
+    {% for proj in projects %}
+    <option value="{{ proj.pk }}" {% if selected_pk == proj.pk|stringformat:'s' %}selected{% endif %}>{{ proj.name }}</option>
+    {% endfor %}
+  </select>
+</form>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+.kpi-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:22px; }
+.kpi { background:var(--white); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 14px; position:relative; overflow:hidden; }
+.kpi::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--kpi-color,var(--accent)); }
+.kpi-label { font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.07em; margin-bottom:8px; }
+.kpi-val   { font-family:var(--syne); font-size:28px; font-weight:800; letter-spacing:-1px; color:var(--kpi-color,var(--text)); }
+.kpi-sub   { font-size:11px; color:var(--text3); margin-top:4px; }
+
+.ins-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+.ins-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:16px; }
+.ins-title { font-family:var(--syne); font-size:14px; font-weight:700; color:var(--text); letter-spacing:-.3px; margin-bottom:4px; }
+.ins-sub   { font-size:11px; color:var(--text3); margin-bottom:16px; }
+
+/* Bar chart */
+.chart-bars { display:flex; align-items:flex-end; gap:6px; height:100px; }
+.chart-bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; }
+.chart-bar { width:100%; border-radius:4px 4px 0 0; transition:height .4s; min-height:2px; }
+.chart-bar-label { font-size:9px; color:var(--text3); }
+.chart-bar-val { font-size:9px; font-weight:700; color:var(--text2); }
+
+/* Donut row */
+.donut-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.donut-dot  { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.donut-bar-wrap { flex:1; height:6px; background:var(--surface2); border-radius:3px; overflow:hidden; }
+.donut-bar-fill { height:100%; border-radius:3px; }
+.donut-count { font-size:12px; font-weight:700; color:var(--text); width:28px; text-align:right; }
+
+/* Comparison table */
+.cmp-table { width:100%; border-collapse:collapse; font-size:12px; }
+.cmp-table th { font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.06em; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+.cmp-table td { padding:10px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.cmp-table tr:last-child td { border-bottom:none; }
+.cmp-table tr:hover td { background:rgba(91,76,245,.02); }
+.cmp-bar { height:5px; border-radius:3px; display:inline-block; }
+
+/* Perf ring */
+.perf-ring { display:flex; flex-direction:column; align-items:center; gap:6px; }
+.ring-outer { width:80px; height:80px; border-radius:50%; border:7px solid; display:flex; align-items:center; justify-content:center; flex-direction:column; }
+.ring-pct  { font-family:var(--syne); font-size:18px; font-weight:800; }
+.ring-lbl  { font-size:9px; color:var(--text3); }
+
+/* Member row */
+.member-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+.member-row:last-child { border-bottom:none; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── KPIs ──────────────────────────────────────────────────────────────── -->
+<div class="kpi-grid">
+  <div class="kpi" style="--kpi-color:#5b4cf5">
+    <div class="kpi-label">Total Tarefas</div>
+    <div class="kpi-val">{{ total_tasks }}</div>
+    <div class="kpi-sub">no escopo selecionado</div>
+  </div>
+  <div class="kpi" style="--kpi-color:#34d399">
+    <div class="kpi-label">Concluídas</div>
+    <div class="kpi-val">{{ done_count }}</div>
+    <div class="kpi-sub">{{ completion_rate }}% do total</div>
+  </div>
+  <div class="kpi" style="--kpi-color:{% if overdue > 0 %}#dc2626{% else %}#34d399{% endif %}">
+    <div class="kpi-label">Em Atraso</div>
+    <div class="kpi-val">{{ overdue }}</div>
+    <div class="kpi-sub">tarefas vencidas abertas</div>
+  </div>
+  <div class="kpi" style="--kpi-color:{% if blocked > 0 %}#dc2626{% else %}#8888aa{% endif %}">
+    <div class="kpi-label">Bloqueadas</div>
+    <div class="kpi-val">{{ blocked }}</div>
+    <div class="kpi-sub">aguardando resolução</div>
+  </div>
+  <div class="kpi" style="--kpi-color:#0ea5e9">
+    <div class="kpi-label">Tempo Médio</div>
+    <div class="kpi-val">{% if avg_exec_days %}{{ avg_exec_days }}d{% else %}—{% endif %}</div>
+    <div class="kpi-sub">execução por tarefa</div>
+  </div>
+  <div class="kpi" style="--kpi-color:{% if on_time_pct >= 80 %}#34d399{% elif on_time_pct >= 50 %}#f59e0b{% else %}#dc2626{% endif %}">
+    <div class="kpi-label">No Prazo</div>
+    <div class="kpi-val">{% if on_time_pct is not None %}{{ on_time_pct }}%{% else %}—{% endif %}</div>
+    <div class="kpi-sub">{{ delta_tasks_count }} tarefas medidas</div>
+  </div>
+</div>
+
+<!-- ── Row 1: Status + Entregas por semana ──────────────────────────────── -->
+<div class="ins-grid">
+  <!-- Status -->
+  <div class="card">
+    <div class="ins-title">Tarefas por Status</div>
+    <div class="ins-sub">Distribuição atual do pipeline</div>
+    {% for s in status_data %}
+    <div class="donut-row">
+      <div class="donut-dot" style="background:{{ s.color }}"></div>
+      <div style="font-size:12px;color:var(--text2);width:110px;flex-shrink:0">{{ s.label }}</div>
+      <div class="donut-bar-wrap">
+        <div class="donut-bar-fill" style="width:{% if total_tasks %}{% widthratio s.value total_tasks 100 %}%{% else %}0%{% endif %};background:{{ s.color }}"></div>
+      </div>
+      <div class="donut-count">{{ s.value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Entregas por semana -->
+  <div class="card">
+    <div class="ins-title">Entregas por Semana</div>
+    <div class="ins-sub">Tarefas concluídas nas últimas 8 semanas</div>
+    <div class="chart-bars" id="weekly-chart">
+      {% for w in weekly %}
+      {% with max_val=weekly|length %}
+      <div class="chart-bar-wrap">
+        <div class="chart-bar-val">{% if w.count > 0 %}{{ w.count }}{% endif %}</div>
+        <div class="chart-bar" style="background:{% if w.count > 0 %}var(--accent){% else %}var(--border){% endif %};height:{{ w.count|default:0 }}px" data-val="{{ w.count }}"></div>
+        <div class="chart-bar-label">{{ w.week }}</div>
+      </div>
+      {% endwith %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ── Row 2: Por prioridade + Desempenho de prazo ──────────────────────── -->
+<div class="ins-grid">
+  <!-- Por prioridade -->
+  <div class="card">
+    <div class="ins-title">Conclusão por Prioridade</div>
+    <div class="ins-sub">Tarefas concluídas vs total por nível</div>
+    {% for p in priority_data %}
+    {% if p.total > 0 %}
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <div style="display:flex;align-items:center;gap:7px">
+          <div style="width:8px;height:8px;border-radius:50%;background:{{ p.color }}"></div>
+          <span style="font-size:12px;font-weight:600;color:var(--text)">{{ p.label }}</span>
+        </div>
+        <span style="font-size:11px;color:var(--text3)">{{ p.done }}/{{ p.total }}</span>
+      </div>
+      <div style="height:6px;background:var(--surface2);border-radius:3px;overflow:hidden">
+        <div style="height:100%;border-radius:3px;background:{{ p.color }};width:{% widthratio p.done p.total 100 %}%"></div>
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <!-- Desempenho de prazo -->
+  <div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+    <div style="text-align:center">
+      <div class="ins-title">Desempenho de Prazo</div>
+      <div class="ins-sub">Baseado em {{ delta_tasks_count }} tarefas com estimativa</div>
+    </div>
+    {% if on_time_pct is not None %}
+    <div class="ring-outer" style="border-color:{% if on_time_pct >= 80 %}#34d399{% elif on_time_pct >= 50 %}#f59e0b{% else %}#dc2626{% endif %}">
+      <div class="ring-pct" style="color:{% if on_time_pct >= 80 %}#34d399{% elif on_time_pct >= 50 %}#f59e0b{% else %}#dc2626{% endif %}">{{ on_time_pct }}%</div>
+      <div class="ring-lbl">no prazo</div>
+    </div>
+    <div style="display:flex;gap:24px;text-align:center">
+      <div>
+        <div style="font-family:var(--syne);font-size:20px;font-weight:800;color:{% if avg_delta <= 0 %}#34d399{% else %}#dc2626{% endif %}">
+          {% if avg_delta %}{% if avg_delta < 0 %}{{ avg_delta|floatformat:1 }}d{% else %}+{{ avg_delta|floatformat:1 }}d{% endif %}{% else %}—{% endif %}
+        </div>
+        <div style="font-size:10px;color:var(--text3)">média por tarefa</div>
+      </div>
+    </div>
+    {% else %}
+    <div style="text-align:center;color:var(--text3);font-size:12px;padding:20px 0">
+      Defina "Estimativa (dias)" nas tarefas<br>para ver o desempenho de prazo.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Comparação de Projetos ────────────────────────────────────────────── -->
+<div class="card" style="margin-bottom:16px">
+  <div class="ins-title">Comparação de Projetos</div>
+  <div class="ins-sub">Performance detalhada por projeto — ordenado por progresso</div>
+  <table class="cmp-table">
+    <thead>
+      <tr>
+        <th>Projeto</th>
+        <th>Status</th>
+        <th>Progresso</th>
+        <th>Tarefas</th>
+        <th>Bloqueadas</th>
+        <th>No Prazo</th>
+        <th>Média Execução</th>
+        <th>Delta Médio</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in project_comparison %}
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:10px;height:10px;border-radius:50%;background:{{ p.color }};flex-shrink:0"></div>
+            <a href="{% url 'projects:kanban' pk=p.pk %}" style="font-weight:600;color:var(--text)">{{ p.name }}</a>
+          </div>
+        </td>
+        <td><span style="font-size:11px;background:rgba(91,76,245,.08);color:var(--accent);padding:2px 8px;border-radius:10px;font-weight:600">{{ p.status }}</span></td>
+        <td style="min-width:120px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden">
+              <div style="height:100%;border-radius:3px;background:{{ p.color }};width:{{ p.progress }}%"></div>
+            </div>
+            <span style="font-size:11px;font-weight:700;color:{{ p.color }};width:32px;text-align:right">{{ p.progress }}%</span>
+          </div>
+        </td>
+        <td style="text-align:center">
+          <span style="font-size:12px;color:var(--text2)">{{ p.done }}/{{ p.total }}</span>
+        </td>
+        <td style="text-align:center">
+          {% if p.blocked > 0 %}
+          <span style="color:#dc2626;font-weight:700;font-size:12px">{{ p.blocked }} 🚨</span>
+          {% else %}
+          <span style="color:#34d399;font-size:12px">—</span>
+          {% endif %}
+        </td>
+        <td style="text-align:center">
+          {% if p.on_time_pct is not None %}
+          <span style="font-size:12px;font-weight:700;color:{% if p.on_time_pct >= 80 %}#34d399{% elif p.on_time_pct >= 50 %}#f59e0b{% else %}#dc2626{% endif %}">{{ p.on_time_pct }}%</span>
+          {% else %}<span style="color:var(--text3);font-size:12px">—</span>{% endif %}
+        </td>
+        <td style="text-align:center">
+          {% if p.avg_exec_days is not None %}
+          <span style="font-size:12px;color:var(--text2)">{{ p.avg_exec_days }}d</span>
+          {% else %}<span style="color:var(--text3);font-size:12px">—</span>{% endif %}
+        </td>
+        <td style="text-align:center">
+          {% if p.avg_delta is not None %}
+          <span style="font-size:12px;font-weight:700;color:{% if p.avg_delta <= 0 %}#34d399{% else %}#dc2626{% endif %}">
+            {% if p.avg_delta < 0 %}{{ p.avg_delta }}d{% else %}+{{ p.avg_delta }}d{% endif %}
+          </span>
+          {% else %}<span style="color:var(--text3);font-size:12px">—</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ── Top Responsáveis ──────────────────────────────────────────────────── -->
+<div class="card">
+  <div class="ins-title">Desempenho por Membro</div>
+  <div class="ins-sub">Tarefas concluídas e em atraso por pessoa</div>
+  {% for m in top_members %}
+  <div class="member-row">
+    <div class="avatar" style="background:{{ m.user.avatar_color }}">{{ m.user.initials }}</div>
+    <div style="flex:1">
+      <div style="font-size:13px;font-weight:600;color:var(--text)">{{ m.user.get_full_name|default:m.user.username }}</div>
+      <div style="font-size:11px;color:var(--text3)">{{ m.user.job_title|default:m.user.get_role_display }}</div>
+    </div>
+    <div style="text-align:center;min-width:60px">
+      <div style="font-family:var(--syne);font-size:16px;font-weight:800;color:#34d399">{{ m.done }}</div>
+      <div style="font-size:9px;color:var(--text3)">concluídas</div>
+    </div>
+    <div style="text-align:center;min-width:60px">
+      <div style="font-family:var(--syne);font-size:16px;font-weight:800;color:{% if m.overdue > 0 %}#dc2626{% else %}#34d399{% endif %}">{{ m.overdue }}</div>
+      <div style="font-size:9px;color:var(--text3)">em atraso</div>
+    </div>
+  </div>
+  {% empty %}
+  <p style="font-size:12px;color:var(--text3);text-align:center;padding:20px 0">Nenhum membro encontrado.</p>
+  {% endfor %}
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Normaliza as barras do gráfico semanal
+(function() {
+  const bars = document.querySelectorAll('.chart-bar');
+  const vals = Array.from(bars).map(b => parseInt(b.dataset.val) || 0);
+  const max  = Math.max(...vals, 1);
+  bars.forEach(b => {
+    const h = Math.max((parseInt(b.dataset.val) || 0) / max * 90, parseInt(b.dataset.val) > 0 ? 4 : 0);
+    b.style.height = h + 'px';
+  });
+})();
+</script>
+{% endblock %}

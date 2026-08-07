@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Notificações — G Project{% endblock %}
+{% block page_title %}Notificações{% endblock %}
+
+{% block extra_head %}
+<style>
+.notif-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  transition: background .12s; cursor: pointer;
+  text-decoration: none; color: inherit;
+}
+.notif-item:hover { background: rgba(91,76,245,.02); }
+.notif-item:last-child { border-bottom: none; }
+.notif-item.unread { background: rgba(91,76,245,.04); }
+.notif-item.unread:hover { background: rgba(91,76,245,.07); }
+
+.notif-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); flex-shrink: 0; margin-top: 5px;
+}
+.notif-dot.read { background: transparent; border: 1.5px solid var(--border2); }
+
+.notif-icon {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; background: var(--surface2);
+}
+.notif-icon.alert  { background: rgba(255,107,107,.12); }
+.notif-icon.check  { background: rgba(52,211,153,.12); }
+.notif-icon.info   { background: rgba(91,76,245,.10); }
+.notif-icon.edit   { background: rgba(251,191,36,.12); }
+
+.notif-msg  { font-size: 13px; color: var(--text); line-height: 1.45; flex: 1; }
+.notif-time { font-size: 11px; color: var(--text3); white-space: nowrap; margin-top: 3px; }
+
+.empty-state { text-align: center; padding: 72px 24px; color: var(--text3); }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<div style="display:flex;gap:8px">
+  {% if unread_count %}
+  <button class="btn btn-ghost btn-sm" onclick="markAllRead()">
+    Marcar todas como lidas ({{ unread_count }})
+  </button>
+  {% endif %}
+  {% if notifications %}
+  <button class="btn btn-ghost btn-sm" id="clear-all-btn" onclick="clearAll()">
+    🗑 Limpar notificações
+  </button>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:700px;margin:0 auto">
+  <div class="card fade-up" style="padding:0;overflow:hidden" id="notif-list-card">
+
+    {% if notifications %}
+    {% for n in notifications %}
+    <div class="notif-item {% if not n.read %}unread{% endif %}" id="notif-{{ n.id }}"
+         onclick="markRead('{{ n.id }}', this)">
+
+      <div class="notif-dot {% if n.read %}read{% endif %}" id="dot-{{ n.id }}"></div>
+
+      <div class="notif-icon
+        {% if '🚨' in n.message or 'problema' in n.message %}alert
+        {% elif '✅' in n.message or 'conclu' in n.message or 'resolveu' in n.message %}check
+        {% elif '✏' in n.message or 'editou' in n.message %}edit
+        {% else %}info{% endif %}">
+        {% if '🚨' in n.message %}🚨
+        {% elif '✅' in n.message %}✅
+        {% elif '✏' in n.message %}✏️
+        {% elif 'atribuiu' in n.message %}📌
+        {% elif 'comentou' in n.message %}💬
+        {% else %}🔔{% endif %}
+      </div>
+
+      <div style="flex:1;min-width:0">
+        <div class="notif-msg">{{ n.message }}</div>
+        <div class="notif-time">{{ n.created_at|timesince }} atrás</div>
+      </div>
+
+    </div>
+    {% endfor %}
+
+    {% else %}
+    <div class="empty-state">
+      <div style="font-size:42px;margin-bottom:14px">🔔</div>
+      <div style="font-family:var(--syne);font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">
+        Nenhuma notificação
+      </div>
+      <div style="font-size:13px">Você está em dia com tudo!</div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script>
+async function markRead(id, el) {
+  if (el.classList.contains('unread')) {
+    const dot = document.getElementById('dot-' + id);
+    if (dot) dot.className = 'notif-dot read';
+    el.classList.remove('unread');
+    try {
+      await fetch(`/notifications/${id}/read/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+      });
+    } catch {}
+  }
+}
+
+async function markAllRead() {
+  document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
+  document.querySelectorAll('.notif-dot:not(.read)').forEach(el => { el.className = 'notif-dot read'; });
+  try {
+    const r = await fetch('/notifications/read-all/', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+    });
+    if (r.ok) {
+      const btn = document.querySelector('.topbar-right button:not(#clear-all-btn)');
+      if (btn) btn.remove();
+    }
+  } catch {}
+}
+
+async function clearAll() {
+  if (!confirm('Apagar todas as notificações? Essa ação não pode ser desfeita.')) return;
+  const btn = document.getElementById('clear-all-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Limpando...'; }
+  try {
+    const r = await fetch('/notifications/clear-all/', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+    });
+    if (r.ok) {
+      document.getElementById('notif-list-card').innerHTML = `
+        <div class="empty-state">
+          <div style="font-size:42px;margin-bottom:14px">🔔</div>
+          <div style="font-family:var(--syne);font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">
+            Nenhuma notificação
+          </div>
+          <div style="font-size:13px">Você está em dia com tudo!</div>
+        </div>`;
+      document.querySelectorAll('.topbar-right button').forEach(b => b.remove());
+    } else if (btn) {
+      btn.disabled = false; btn.textContent = '🗑 Limpar notificações';
+    }
+  } catch {
+    if (btn) { btn.disabled = false; btn.textContent = '🗑 Limpar notificações'; }
+  }
+}
+</script>
+{% endblock %}

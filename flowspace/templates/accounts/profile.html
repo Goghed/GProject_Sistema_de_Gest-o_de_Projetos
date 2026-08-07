@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Meu Perfil — G Project{% endblock %}
+{% block page_title %}Meu Perfil{% endblock %}
+
+{% block extra_head %}
+<style>
+.photo-ring {
+  position: relative; display: inline-block; cursor: pointer;
+}
+.photo-ring:hover .photo-overlay { opacity: 1; }
+.photo-overlay {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: rgba(0,0,0,0.45); display: flex; align-items: center;
+  justify-content: center; opacity: 0; transition: opacity .2s;
+  font-size: 18px; color: #fff;
+}
+.avatar-lg {
+  width: 68px; height: 68px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 800; color: #fff; flex-shrink: 0;
+}
+.remove-photo-btn {
+  font-size: 11px; color: var(--coral); cursor: pointer; background: none;
+  border: none; padding: 0; font-family: var(--dm); margin-top: 4px;
+}
+.remove-photo-btn:hover { text-decoration: underline; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:500px">
+<form method="post" enctype="multipart/form-data">
+{% csrf_token %}
+<div class="card fade-up" style="margin-bottom:14px">
+
+  <!-- Avatar / foto -->
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px">
+    <div>
+      <label class="photo-ring" for="photo-input" title="Alterar foto">
+        {% if user.photo %}
+        <img src="{{ user.photo.url }}" alt="Foto" style="width:68px;height:68px;border-radius:50%;object-fit:cover;display:block">
+        {% else %}
+        <div class="avatar-lg" style="background:{{ user.avatar_color }}">{{ user.initials }}</div>
+        {% endif %}
+        <div class="photo-overlay">📷</div>
+      </label>
+      <input type="file" id="photo-input" name="photo" accept="image/*" style="display:none" onchange="previewPhoto(this)">
+      {% if user.photo %}
+      <button type="submit" name="remove_photo" value="1" class="remove-photo-btn" onclick="return confirm('Remover foto?')">Remover foto</button>
+      {% endif %}
+    </div>
+    <div>
+      <div style="font-family:var(--syne);font-size:18px;font-weight:800">{{ user.get_full_name|default:user.username }}</div>
+      <div style="color:var(--text3);font-size:12px">{{ user.get_role_display }} · {{ user.email }}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px">Clique na foto para alterar · Máx. 5MB</div>
+    </div>
+  </div>
+
+  <div class="form-grid-2">
+    <div class="form-group">
+      <label class="form-label">Nome</label>
+      <input type="text" name="first_name" class="form-control" value="{{ user.first_name }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Sobrenome</label>
+      <input type="text" name="last_name" class="form-control" value="{{ user.last_name }}">
+    </div>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Cargo</label>
+    <input type="text" name="job_title" class="form-control" value="{{ user.job_title }}">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Bio</label>
+    <textarea name="bio" class="form-control" rows="3">{{ user.bio }}</textarea>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Cor do Avatar</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:5px">
+      {% for c in colors %}
+      <label style="cursor:pointer">
+        <input type="radio" name="avatar_color" value="{{ c }}"
+               {% if user.avatar_color == c %}checked{% endif %}
+               style="display:none">
+        <div style="width:26px;height:26px;border-radius:50%;background:{{ c }};cursor:pointer;
+                    border:{% if user.avatar_color == c %}3px solid white{% else %}2px solid transparent{% endif %};
+                    box-shadow:{% if user.avatar_color == c %}0 0 0 2px {{ c }}{% else %}none{% endif %}">
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+<button type="submit" class="btn btn-primary">Salvar Alterações</button>
+</form>
+</div>
+
+<script>
+function previewPhoto(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  if (file.size > 5 * 1024 * 1024) {
+    alert('Foto muito grande. Máximo 5MB.');
+    input.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const ring = input.previousElementSibling || input.closest('.photo-ring');
+    const existing = ring.parentElement.querySelector('img, .avatar-lg');
+    if (existing) {
+      existing.style.display = 'none';
+    }
+    let preview = ring.querySelector('img.preview-img');
+    if (!preview) {
+      preview = document.createElement('img');
+      preview.className = 'preview-img';
+      preview.style.cssText = 'width:68px;height:68px;border-radius:50%;object-fit:cover;display:block';
+      ring.insertBefore(preview, ring.firstChild);
+    }
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+</script>
+{% endblock %}

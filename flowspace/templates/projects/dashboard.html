@@ -1,0 +1,515 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — G Project{% endblock %}
+{% block page_title %}Visão Geral{% endblock %}
+{% block topbar_actions %}
+<div style="display:flex;gap:8px;align-items:center">
+  <a href="{% url 'projects:dashboard' %}"
+     style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;border:1.5px solid var(--border2);color:var(--text3);text-decoration:none;transition:all .2s{% if not cidade_filter %};background:var(--surface2);color:var(--text){% endif %}">
+    Todas
+  </a>
+  <a href="{% url 'projects:dashboard' %}?cidade=londrina"
+     style="font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;border:1.5px solid {% if cidade_filter == 'londrina' %}#dc2626{% else %}rgba(220,38,38,.3){% endif %};color:{% if cidade_filter == 'londrina' %}#fff{% else %}#dc2626{% endif %};background:{% if cidade_filter == 'londrina' %}#dc2626{% else %}rgba(220,38,38,.08){% endif %};text-decoration:none;transition:all .2s">
+    Londrina
+  </a>
+  <a href="{% url 'projects:dashboard' %}?cidade=itu"
+     style="font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;border:1.5px solid {% if cidade_filter == 'itu' %}#d97706{% else %}rgba(217,119,6,.3){% endif %};color:{% if cidade_filter == 'itu' %}#fff{% else %}#d97706{% endif %};background:{% if cidade_filter == 'itu' %}#d97706{% else %}rgba(217,119,6,.08){% endif %};text-decoration:none;transition:all .2s">
+    Itu
+  </a>
+</div>
+{% endblock %}
+{% block content %}
+
+<!-- Stats -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px">
+  <div class="card card-sm fade-up">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Projetos Ativos</div>
+    <div id="stat-projects" style="font-family:var(--syne);font-size:30px;font-weight:800;letter-spacing:-1px;transition:color .3s">{{ stats.projects }}</div>
+  </div>
+  <div class="card card-sm fade-up" style="animation-delay:.05s">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Tarefas Abertas</div>
+    <div id="stat-open" style="font-family:var(--syne);font-size:30px;font-weight:800;color:var(--accent);letter-spacing:-1px;transition:color .3s">{{ stats.open_tasks }}</div>
+  </div>
+  <div class="card card-sm fade-up" style="animation-delay:.10s">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Concluídas</div>
+    <div id="stat-done" style="font-family:var(--syne);font-size:30px;font-weight:800;color:#34d399;letter-spacing:-1px;transition:color .3s">{{ stats.done_tasks }}</div>
+  </div>
+  <div class="card card-sm fade-up" style="animation-delay:.15s;position:relative">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Em Atraso</div>
+    <div id="stat-overdue" style="font-family:var(--syne);font-size:30px;font-weight:800;letter-spacing:-1px;transition:color .3s;color:{% if stats.overdue %}#dc2626{% else %}#34d399{% endif %}">{{ stats.overdue }}</div>
+    <div id="live-indicator" style="position:absolute;top:10px;right:12px;display:flex;align-items:center;gap:5px;font-size:9px;color:var(--text3)">
+      <span id="live-dot" style="width:6px;height:6px;border-radius:50%;background:#34d399;display:inline-block"></span>
+      <span id="live-label">ao vivo</span>
+    </div>
+  </div>
+</div>
+
+<!-- Status dos Projetos — Gantt mini -->
+<div style="margin-bottom:24px">
+  <div class="card fade-up" style="animation-delay:.2s;overflow:hidden;padding:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px 10px;flex-wrap:wrap;gap:8px">
+      <div class="section-title">Status dos Projetos</div>
+      <div style="display:flex;gap:12px;font-size:10px;color:var(--text3);flex-wrap:wrap">
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#c7c7d4;display:inline-block"></span>Backlog/A fazer</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#0ea5e9;display:inline-block"></span>Em progresso</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#a855f7;display:inline-block"></span>Review</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#fbbf24;display:inline-block"></span>Bloqueado</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#22c55e;display:inline-block"></span>Concluído</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#dc2626;display:inline-block"></span>Atrasado</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#1a1a1a;border:1px solid rgba(255,255,255,0.15);display:inline-block"></span>Impedimento</span>
+      </div>
+    </div>
+    <div style="overflow-x:auto;overflow-y:auto;max-height:420px;position:relative" id="dg-scroll">
+      <div id="dg-table" style="display:grid;min-width:max-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Popup flutuante do Gantt -->
+<div id="dg-popup" style="position:fixed;pointer-events:none;z-index:9999;background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px 14px;box-shadow:0 8px 30px rgba(0,0,0,.18);font-size:12px;min-width:180px;max-width:260px;opacity:0;transition:opacity .15s;"></div>
+
+<style>
+/* ── Mini Gantt do Dashboard ─────────────────────────────────────── */
+#dg-table .dg-name-sticky { position:sticky;left:0;z-index:4;background:var(--surface2);min-width:185px; }
+#dg-table .dg-month-cell  { position:sticky;top:0;z-index:3;background:var(--surface2);border-bottom:1px solid var(--border);border-right:1px solid var(--border);padding:3px 6px;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;overflow:hidden; }
+#dg-table .dg-month-cell.dg-name-sticky { z-index:6; }
+#dg-table .dg-day-hdr     { position:sticky;top:22px;z-index:3;background:var(--white);border-bottom:2px solid var(--border);text-align:center;font-size:9px;font-weight:600;color:var(--text3);padding:2px 0;line-height:1; }
+#dg-table .dg-day-hdr.dg-today   { background:rgba(91,76,245,.06);color:var(--accent);font-weight:800; }
+#dg-table .dg-day-hdr.dg-weekend { color:var(--border2); }
+#dg-table .dg-day-hdr.dg-name-sticky { position:sticky;left:0;top:22px;z-index:6;background:var(--white);font-size:10px;font-weight:700;color:var(--text3);text-align:left;padding:2px 12px;border-right:1px solid var(--border);min-width:185px; }
+#dg-table .dg-name-cell   { position:sticky;left:0;z-index:3;background:var(--white);border-bottom:1px solid var(--border);border-right:1px solid var(--border);display:flex;align-items:center;gap:7px;padding:0 12px;height:52px;min-width:185px; }
+#dg-table .dg-sq-cell     { height:52px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative; }
+#dg-table .dg-sq-cell.dg-today   { background:rgba(91,76,245,.04); }
+#dg-table .dg-sq-cell.dg-weekend { background:var(--surface2); }
+#dg-table .dg-sq { width:20px;height:20px;cursor:pointer;transition:transform .12s,box-shadow .12s; }
+#dg-table .dg-sq:hover { transform:scale(1.4);z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.28); }
+@keyframes dg-pulse-blocked {
+  0%,100% { opacity:1; box-shadow:0 0 0 0 rgba(251,191,36,.7); }
+  50%      { opacity:.55; box-shadow:0 0 0 4px rgba(251,191,36,0); }
+}
+#dg-table .dg-sq.dg-sq-blocked { animation:dg-pulse-blocked 1.4s ease-in-out infinite; }
+.dg-today-line { position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--accent);opacity:.4;pointer-events:none; }
+
+</style>
+
+<script>
+/* ── Mini Gantt do Dashboard ─────────────────────────────────────── */
+(function () {
+  const ROWS        = {{ gantt_rows_json|safe }};
+  const G_START_STR = "{{ gantt_dash_start }}";
+  const G_END_STR   = "{{ gantt_dash_end }}";
+
+  // Cores por status (igual à legenda)
+  const STATUS_COLOR = {
+    backlog:     "#c7c7d4",
+    todo:        "#c7c7d4",
+    in_progress: "#0ea5e9",
+    review:      "#a855f7",
+    paused:      "#1a1a1a",
+    done:        "#22c55e",
+  };
+  const OVERDUE_COLOR = "#dc2626";
+  const TODAY_STR   = "{{ today|date:'Y-m-d' }}";
+  const MONTH_PT    = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
+  function parseD(s) { const [y,m,d]=s.split("-").map(Number); return new Date(Date.UTC(y,m-1,d,12)); }
+  function toYMD(d)  { return d.toISOString().slice(0,10); }
+  function addD(d,n) { const r=new Date(d); r.setUTCDate(r.getUTCDate()+n); return r; }
+  function mk(tag,cls,txt) { const e=document.createElement(tag); if(cls)e.className=cls; if(txt!==undefined)e.textContent=txt; return e; }
+
+  const table  = document.getElementById("dg-table");
+  const scroll = document.getElementById("dg-scroll");
+  const popup  = document.getElementById("dg-popup");
+  if (!table || !ROWS.length) return;
+
+  /* Monta array de dias */
+  const days=[], gEnd=G_END_STR;
+  let cur=parseD(G_START_STR);
+  while(toYMD(cur)<=gEnd){ days.push(new Date(cur)); cur=addD(cur,1); }
+
+  /* Grid columns */
+  table.style.gridTemplateColumns = `185px ${days.map(()=>"26px").join(" ")}`;
+
+  /* ── Linha de meses ── */
+  table.appendChild(mk("div","dg-month-cell dg-name-sticky"));
+  let prevM=-1, mEl=null, mCnt=0;
+  days.forEach((d,i)=>{
+    const m=d.getUTCMonth();
+    if(m!==prevM){ if(mEl) mEl.style.gridColumn=`span ${mCnt}`; mEl=mk("div","dg-month-cell",`${MONTH_PT[m]} ${d.getUTCFullYear()}`); table.appendChild(mEl); prevM=m; mCnt=0; }
+    mCnt++;
+    if(i===days.length-1) mEl.style.gridColumn=`span ${mCnt}`;
+  });
+
+  /* ── Linha de dias ── */
+  table.appendChild(mk("div","dg-day-hdr dg-name-sticky","Projeto"));
+  days.forEach(d=>{
+    const ymd=toYMD(d), dow=d.getUTCDay();
+    let cls="dg-day-hdr";
+    if(ymd===TODAY_STR) cls+=" dg-today";
+    else if(dow===0||dow===6) cls+=" dg-weekend";
+    const txt=d.getUTCDate();
+    table.appendChild(mk("div",cls,txt));
+  });
+
+  /* ── Popup ── */
+  function showPopup(sq, task, ymd, hasIssue) {
+    const [yr,mo,dy] = ymd.split('-');
+    const dayLabel = `${dy}/${mo}/${yr}`;
+    const avHtml = (task.assignees||[]).map(a=>
+      `<div style="width:20px;height:20px;border-radius:50%;background:${a.color};display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;color:#fff">${a.initials}</div>`
+    ).join("");
+    const issueHtml = hasIssue
+      ? `<div style="font-size:10px;color:#1a1a1a;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:4px;background:#f0f0f0;padding:3px 6px;border-radius:4px">⬛ Impedimento registrado neste dia</div>`
+      : "";
+    popup.innerHTML = `
+      <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-weight:600">📅 ${dayLabel}</div>
+      <div style="font-weight:600;color:var(--text);margin-bottom:5px;line-height:1.35">${task.title}</div>
+      ${issueHtml}
+      <div style="display:flex;gap:6px;margin-bottom:3px">
+        <span style="font-size:10px;padding:1px 7px;border-radius:10px;background:${(STATUS_COLOR[task.status]||task.color)}22;color:${STATUS_COLOR[task.status]||task.color};font-weight:600">${task.status_display||task.status}</span>
+        <span style="font-size:10px;color:var(--text3)">${task.priority}</span>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:${(task.subtask_total>0||avHtml)?'6px':'0'}">Prazo: <b style="color:var(--text2)">${task.due}</b></div>
+      ${task.subtask_total > 0 ? (() => {
+        const pct = Math.round((task.subtask_done / task.subtask_total) * 100);
+        return `<div style="margin-bottom:${avHtml?'6px':'2px'}">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:3px">
+            <span>Subtarefas</span><span style="font-weight:600;color:var(--text2)">${task.subtask_done}/${task.subtask_total} (${pct}%)</span>
+          </div>
+          <div style="height:4px;border-radius:2px;background:var(--border2);overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${STATUS_COLOR[task.status]||task.color};border-radius:2px;transition:width .2s"></div>
+          </div>
+        </div>`;
+      })() : ""}
+      ${avHtml ? `<div style="display:flex;gap:3px">${avHtml}</div>` : ""}
+    `;
+    popup.style.opacity="1";
+    requestAnimationFrame(()=>{
+      const r=sq.getBoundingClientRect();
+      const ph=popup.offsetHeight, pw=popup.offsetWidth;
+      let top=r.top-ph-10;
+      if(top<8) top=r.bottom+10;
+      let left=r.left+r.width/2-pw/2;
+      if(left<8) left=8;
+      if(left+pw>window.innerWidth-8) left=window.innerWidth-pw-8;
+      popup.style.left=left+"px";
+      popup.style.top=top+"px";
+    });
+  }
+  function hidePopup(){ popup.style.opacity="0"; }
+
+  /* ── Linhas de projeto ── */
+  ROWS.forEach(row=>{
+    /* Monta mapa dia→tarefa (primeira tarefa que cobre o dia) */
+    const dayMap={};
+    row.tasks.forEach(t=>{
+      if(!t.start||!t.end) return;
+      let d=parseD(t.start);
+      while(toYMD(d)<=t.end){ const k=toYMD(d); if(!dayMap[k]) dayMap[k]=t; d=addD(d,1); }
+    });
+
+    /* Coluna do nome */
+    const nameCell=mk("div","dg-name-cell");
+    const dot=mk("div"); dot.style.cssText=`width:8px;height:8px;border-radius:50%;background:${row.color};flex-shrink:0`;
+    const link=document.createElement("a");
+    link.href=row.proj_url;
+    link.style.cssText="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-decoration:none;flex:1";
+    link.textContent=row.name;
+    nameCell.appendChild(dot);
+    nameCell.appendChild(link);
+    table.appendChild(nameCell);
+
+    /* Células dos dias */
+    days.forEach(d=>{
+      const ymd=toYMD(d), dow=d.getUTCDay();
+      let cls="dg-sq-cell";
+      if(ymd===TODAY_STR) cls+=" dg-today";
+      else if(dow===0||dow===6) cls+=" dg-weekend";
+      const cell=mk("div",cls);
+      if(ymd===TODAY_STR) cell.appendChild(mk("div","dg-today-line"));
+
+      // Verifica se a tarefa permite trabalho neste dia da semana
+      const rawTask = dayMap[ymd];
+      const task = rawTask && (
+        (dow === 6 && !rawTask.work_saturday) ? null :
+        (dow === 0 && !rawTask.work_sunday)   ? null : rawTask
+      );
+      if(task){
+        const hasIssue = task.issue_dates && task.issue_dates.includes(ymd);
+        const sq=mk("div", task.is_blocked ? "dg-sq dg-sq-blocked" : "dg-sq");
+
+        const isOverdue = !task.is_blocked
+          && task.status !== 'done'
+          && task.due_date_iso
+          && task.due_date_iso < TODAY_STR;
+        const sColor = isOverdue ? OVERDUE_COLOR : (STATUS_COLOR[task.status] || task.color);
+        if(hasIssue){
+          sq.style.background = "#1a1a1a";
+          sq.style.boxShadow  = "0 0 0 1.5px rgba(26,26,26,0.5)";
+        } else if(task.subtask_total > 0){
+          const pct = Math.round((task.subtask_done / task.subtask_total) * 100);
+          if(pct > 0 && pct < 100){
+            sq.style.background = `linear-gradient(to right, ${sColor} ${pct}%, ${sColor}33 ${pct}%)`;
+            sq.style.boxShadow  = `inset 0 0 0 1px ${sColor}66`;
+          } else {
+            sq.style.background = sColor;
+          }
+        } else {
+          sq.style.background = sColor;
+        }
+
+        const isFirst=ymd===task.start, isLast=ymd===task.end;
+        if(isFirst&&isLast)      sq.style.borderRadius="4px";
+        else if(isFirst)         sq.style.borderRadius="4px 2px 2px 4px";
+        else if(isLast)          sq.style.borderRadius="2px 4px 4px 2px";
+        else                     sq.style.borderRadius="2px";
+
+        sq.addEventListener("mouseenter", ()=>showPopup(sq, task, ymd, hasIssue));
+        sq.addEventListener("mouseleave", hidePopup);
+        sq.addEventListener("click", e=>{ e.stopPropagation(); window.location.href=task.url; });
+        cell.appendChild(sq);
+      }
+      table.appendChild(cell);
+    });
+  });
+
+  /* Scrolla até hoje */
+  const todayIdx=days.findIndex(d=>toYMD(d)===TODAY_STR);
+  if(todayIdx>=0 && scroll){
+    requestAnimationFrame(()=>{ scroll.scrollLeft=Math.max(0, todayIdx*20 - scroll.clientWidth/2 + 75); });
+  }
+})();
+</script>
+
+<!-- Equipes Técnicas -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+  <div class="section-title">Equipes Técnicas</div>
+</div>
+
+{% if equipes %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:24px">
+{% for equipe in equipes %}
+{% with atribs=equipe.atribuicoes.all %}
+<div class="card fade-up" style="animation-delay:.3s;padding:0;overflow:hidden">
+
+  <!-- Cabeçalho da equipe -->
+  {% if equipe.cidade == "itu" %}
+  <div style="background:linear-gradient(135deg,#ca8a04 0%,#a16207 100%);padding:14px 16px">
+  {% elif equipe.cidade == "londrina" %}
+  <div style="background:linear-gradient(135deg,#dc2626 0%,#991b1b 100%);padding:14px 16px">
+  {% else %}
+  <div style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 100%);padding:14px 16px">
+  {% endif %}
+    <div style="font-size:9px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,.5);text-transform:uppercase;margin-bottom:8px">Equipe</div>
+    <div style="display:flex;align-items:flex-start;gap:12px">
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <!-- Foto do técnico ou initials -->
+        {% if equipe.foto %}
+        <img src="{{ equipe.foto.url }}" alt="{{ equipe.tecnico }}"
+             style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,.2)">
+        {% elif equipe.tecnico_user and equipe.tecnico_user.photo %}
+        <img src="{{ equipe.tecnico_user.photo.url }}" alt="{{ equipe.tecnico }}"
+             style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,.2)">
+        {% else %}
+        <div style="width:52px;height:52px;border-radius:12px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-family:var(--syne);font-size:20px;font-weight:800;color:#fff;border:2px solid rgba(255,255,255,.1)">
+          {{ equipe.tecnico|first|upper }}
+        </div>
+        {% endif %}
+        <!-- Foto do auxiliar ou initials -->
+        {% if equipe.auxiliar %}
+          {% if equipe.foto_auxiliar %}
+          <img src="{{ equipe.foto_auxiliar.url }}" alt="{{ equipe.auxiliar }}"
+               style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,.2)">
+          {% elif equipe.auxiliar_user and equipe.auxiliar_user.photo %}
+          <img src="{{ equipe.auxiliar_user.photo.url }}" alt="{{ equipe.auxiliar }}"
+               style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,.2)">
+          {% else %}
+          <div style="width:52px;height:52px;border-radius:12px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-family:var(--syne);font-size:20px;font-weight:800;color:#fff;border:2px solid rgba(255,255,255,.1)">
+            {{ equipe.auxiliar|first|upper }}
+          </div>
+          {% endif %}
+        {% endif %}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="font-size:14px;font-weight:800;color:#fff;font-family:var(--syne)">{{ equipe.tecnico }}</span>
+          <span style="font-size:10px;color:rgba(255,255,255,.45);background:rgba(255,255,255,.1);padding:1px 6px;border-radius:8px;flex-shrink:0">Técnico</span>
+        </div>
+        {% if equipe.auxiliar %}
+        <div style="display:flex;align-items:center;gap:7px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span style="font-size:12px;color:rgba(255,255,255,.75)">{{ equipe.auxiliar }}</span>
+          <span style="font-size:10px;color:rgba(255,255,255,.35);background:rgba(255,255,255,.07);padding:1px 6px;border-radius:8px;flex-shrink:0">Auxiliar</span>
+        </div>
+        {% endif %}
+        {% if equipe.veiculo or equipe.placa %}
+        <div style="display:flex;align-items:center;gap:6px;margin-top:2px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          <span style="font-size:11px;color:rgba(255,255,255,.55)">{{ equipe.veiculo }}{% if equipe.veiculo and equipe.placa %} · {% endif %}{{ equipe.placa }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Slots de projetos -->
+  <div style="padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+
+    {% for atrib in atribs %}
+    {% if atrib.posicao == 0 %}
+    <!-- Atualmente -->
+    <div style="border-left:3px solid #22c55e;padding:8px 10px;background:#f0fdf4;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#16a34a;text-transform:uppercase;margin-bottom:5px">▶ Atualmente</div>
+      {% if atrib.projeto %}
+      <div style="font-size:12px;font-weight:600;color:#166534;margin-bottom:4px">{{ atrib.projeto.name }}</div>
+      {% endif %}
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        {% if atrib.tipo_instalacao %}<span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 7px;border-radius:8px">{{ atrib.tipo_instalacao }}</span>{% endif %}
+        {% if atrib.varejo_projeto %}<span style="font-size:10px;background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:8px">{{ atrib.varejo_projeto }}</span>{% endif %}
+        {% if atrib.dias_execucao %}<span style="font-size:10px;background:#ecfdf5;color:#047857;padding:1px 7px;border-radius:8px">{{ atrib.dias_execucao }}</span>{% endif %}
+      </div>
+      {% if atrib.data_inicio or atrib.data_termino %}
+      <div style="font-size:10px;color:#4ade80;margin-top:4px">
+        {% if atrib.data_inicio %}{{ atrib.data_inicio|date:"d/m/Y" }}{% endif %}{% if atrib.data_inicio and atrib.data_termino %} → {% endif %}{% if atrib.data_termino %}{{ atrib.data_termino|date:"d/m/Y" }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% elif atrib.posicao == 1 %}
+    <!-- Fila 1 -->
+    <div style="border-left:3px solid #f59e0b;padding:8px 10px;background:#fffbeb;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#b45309;text-transform:uppercase;margin-bottom:5px">⏳ Fila 1</div>
+      {% if atrib.projeto %}
+      <div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:4px">{{ atrib.projeto.name }}</div>
+      {% endif %}
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        {% if atrib.tipo_instalacao %}<span style="font-size:10px;background:#fef3c7;color:#b45309;padding:1px 7px;border-radius:8px">{{ atrib.tipo_instalacao }}</span>{% endif %}
+        {% if atrib.varejo_projeto %}<span style="font-size:10px;background:#fde68a;color:#92400e;padding:1px 7px;border-radius:8px">{{ atrib.varejo_projeto }}</span>{% endif %}
+        {% if atrib.dias_execucao %}<span style="font-size:10px;background:#fffbeb;color:#b45309;padding:1px 7px;border-radius:8px">{{ atrib.dias_execucao }}</span>{% endif %}
+      </div>
+      {% if atrib.data_inicio or atrib.data_termino %}
+      <div style="font-size:10px;color:#fbbf24;margin-top:4px">
+        {% if atrib.data_inicio %}{{ atrib.data_inicio|date:"d/m/Y" }}{% endif %}{% if atrib.data_inicio and atrib.data_termino %} → {% endif %}{% if atrib.data_termino %}{{ atrib.data_termino|date:"d/m/Y" }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% elif atrib.posicao == 2 %}
+    <!-- Fila 2 -->
+    <div style="border-left:3px solid #fb923c;padding:8px 10px;background:#fff7ed;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#c2410c;text-transform:uppercase;margin-bottom:5px">⏳ Fila 2</div>
+      {% if atrib.projeto %}
+      <div style="font-size:12px;font-weight:600;color:#9a3412;margin-bottom:4px">{{ atrib.projeto.name }}</div>
+      {% endif %}
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        {% if atrib.tipo_instalacao %}<span style="font-size:10px;background:#ffedd5;color:#c2410c;padding:1px 7px;border-radius:8px">{{ atrib.tipo_instalacao }}</span>{% endif %}
+        {% if atrib.varejo_projeto %}<span style="font-size:10px;background:#fed7aa;color:#9a3412;padding:1px 7px;border-radius:8px">{{ atrib.varejo_projeto }}</span>{% endif %}
+        {% if atrib.dias_execucao %}<span style="font-size:10px;background:#fff7ed;color:#c2410c;padding:1px 7px;border-radius:8px">{{ atrib.dias_execucao }}</span>{% endif %}
+      </div>
+      {% if atrib.data_inicio or atrib.data_termino %}
+      <div style="font-size:10px;color:#fb923c;margin-top:4px">
+        {% if atrib.data_inicio %}{{ atrib.data_inicio|date:"d/m/Y" }}{% endif %}{% if atrib.data_inicio and atrib.data_termino %} → {% endif %}{% if atrib.data_termino %}{{ atrib.data_termino|date:"d/m/Y" }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% elif atrib.posicao == 3 %}
+    <!-- Fila 3 -->
+    <div style="border-left:3px solid #94a3b8;padding:8px 10px;background:#f8fafc;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748b;text-transform:uppercase;margin-bottom:5px">⏳ Fila 3</div>
+      {% if atrib.projeto %}
+      <div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:4px">{{ atrib.projeto.name }}</div>
+      {% endif %}
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        {% if atrib.tipo_instalacao %}<span style="font-size:10px;background:#f1f5f9;color:#64748b;padding:1px 7px;border-radius:8px">{{ atrib.tipo_instalacao }}</span>{% endif %}
+        {% if atrib.varejo_projeto %}<span style="font-size:10px;background:#e2e8f0;color:#475569;padding:1px 7px;border-radius:8px">{{ atrib.varejo_projeto }}</span>{% endif %}
+        {% if atrib.dias_execucao %}<span style="font-size:10px;background:#f8fafc;color:#64748b;padding:1px 7px;border-radius:8px">{{ atrib.dias_execucao }}</span>{% endif %}
+      </div>
+      {% if atrib.data_inicio or atrib.data_termino %}
+      <div style="font-size:10px;color:#94a3b8;margin-top:4px">
+        {% if atrib.data_inicio %}{{ atrib.data_inicio|date:"d/m/Y" }}{% endif %}{% if atrib.data_inicio and atrib.data_termino %} → {% endif %}{% if atrib.data_termino %}{{ atrib.data_termino|date:"d/m/Y" }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    {% if not atribs %}
+    <div style="text-align:center;color:var(--text3);padding:16px 0;font-size:12px">Sem projetos agendados</div>
+    {% endif %}
+
+  </div>
+</div>
+{% endwith %}
+{% endfor %}
+</div>
+
+{% else %}
+<div class="card fade-up" style="animation-delay:.3s;text-align:center;color:var(--text3);padding:32px">
+  Nenhuma equipe técnica cadastrada. <a href="{% url 'projects:equipes' %}" style="color:var(--accent)">Cadastrar equipe</a>
+</div>
+{% endif %}
+
+<script>
+(function () {
+  const STATS_URL = "{% url 'projects:stats_json' %}{% if cidade_filter %}?cidade={{ cidade_filter }}{% endif %}";
+  const INTERVAL  = 5000;
+
+  const els = {
+    projects: document.getElementById('stat-projects'),
+    open:     document.getElementById('stat-open'),
+    done:     document.getElementById('stat-done'),
+    overdue:  document.getElementById('stat-overdue'),
+    dot:      document.getElementById('live-dot'),
+    label:    document.getElementById('live-label'),
+  };
+
+  let lastUpdated = Date.now();
+
+  function flash(el) {
+    el.style.transform = 'scale(1.12)';
+    el.style.transition = 'transform .2s';
+    setTimeout(() => { el.style.transform = ''; }, 200);
+  }
+
+  function updateStat(el, newVal) {
+    if (el && el.textContent.trim() !== String(newVal)) {
+      el.textContent = newVal;
+      flash(el);
+    }
+  }
+
+  function setOverdueColor(el, val) {
+    if (el) el.style.color = val > 0 ? '#dc2626' : '#34d399';
+  }
+
+  function updateLabel() {
+    if (!els.label) return;
+    const sec = Math.round((Date.now() - lastUpdated) / 1000);
+    els.label.textContent = sec < 5 ? 'agora' : `há ${sec}s`;
+  }
+
+  async function poll() {
+    try {
+      if (document.hidden) return;
+      const sep  = STATS_URL.includes('?') ? '&' : '?';
+      const res  = await fetch(STATS_URL + sep + '_=' + Date.now(), { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('network');
+      const data = await res.json();
+
+      updateStat(els.projects, data.projects);
+      updateStat(els.open,     data.open_tasks);
+      updateStat(els.done,     data.done_tasks);
+      updateStat(els.overdue,  data.overdue);
+      setOverdueColor(els.overdue, data.overdue);
+
+      lastUpdated = Date.now();
+      if (els.dot)   els.dot.style.background   = '#34d399';
+      if (els.label) els.label.style.color = 'var(--text3)';
+    } catch {
+      if (els.dot)   els.dot.style.background   = '#fbbf24';
+      if (els.label) { els.label.textContent = 'offline'; els.label.style.color = '#fbbf24'; }
+    }
+  }
+
+  setInterval(poll, INTERVAL);
+  setInterval(updateLabel, 1000);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,471 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — Fluxo{% endblock %}
+
+{% block topbar_left %}
+<div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:2px">
+    <a href="{% url 'projects:dashboard' %}" style="color:var(--text3)">Projetos</a> /
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div style="width:10px;height:10px;border-radius:50%;background:{{ project.color }}"></div>
+    <div class="topbar-title">{{ project.name }}</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block topbar_actions %}
+<div class="view-pills">
+  <a href="{% url 'projects:kanban' pk=project.pk %}" class="vpill">⊞ Kanban</a>
+  <a href="{% url 'projects:timeline' pk=project.pk %}" class="vpill">◷ Timeline</a>
+  <a href="{% url 'projects:task_list' pk=project.pk %}" class="vpill">≡ Lista</a>
+  <a href="{% url 'projects:flow' pk=project.pk %}" class="vpill active">⬡ Fluxo</a>
+</div>
+{% if can_edit %}
+<button class="btn btn-ghost btn-sm" id="btn-connect" onclick="toggleConnectMode()">🔗 Conectar</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<style>
+#flow-canvas { width:100%; height:calc(100vh - 140px); position:relative; overflow:auto; background:var(--bg2); border-radius:12px; border:1px solid var(--border); }
+#flow-svg    { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
+
+.flow-node {
+  position:absolute;
+  width:200px;
+  background:var(--white);
+  border-radius:10px;
+  border:2px solid var(--border);
+  box-shadow:var(--shadow-sm);
+  cursor:pointer;
+  transition:box-shadow .15s, border-color .15s, transform .1s;
+  user-select:none;
+}
+.flow-node:hover { box-shadow:var(--shadow-md); transform:translateY(-2px); }
+.flow-node.selected { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 20%,transparent); }
+.flow-node.connect-source { border-color:#f59e0b; box-shadow:0 0 0 3px #fbbf2440; }
+.flow-node.connect-hover  { border-color:#34d399; box-shadow:0 0 0 3px #34d39940; cursor:crosshair; }
+.flow-node.blocked-node   { border-color:#fbbf24; }
+
+.node-header { padding:10px 12px 6px; border-bottom:1px solid var(--border); }
+.node-title  { font-size:12px; font-weight:600; color:var(--text); line-height:1.3; word-break:break-word; }
+.node-body   { padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.node-status-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.node-avatars    { display:flex; }
+.node-avatar     { width:20px; height:20px; border-radius:50%; font-size:8px; font-weight:700; color:#fff; display:flex; align-items:center; justify-content:center; border:2px solid var(--white); margin-left:-5px; }
+
+/* Seta SVG */
+.dep-arrow { stroke:#94a3b8; stroke-width:2; fill:none; marker-end:url(#arrowhead); transition:stroke .15s; }
+.dep-arrow:hover { stroke:var(--accent); }
+.dep-arrow-hit { stroke:transparent; stroke-width:16; fill:none; cursor:pointer; }
+
+/* Modo conectar */
+body.connect-mode #flow-canvas { cursor:crosshair; }
+body.connect-mode .flow-node  { cursor:crosshair; }
+#connect-hint {
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+  background:#1e293b; color:#fff; font-size:12px; font-weight:600;
+  padding:8px 18px; border-radius:20px; z-index:1000;
+  display:none; gap:8px; align-items:center;
+  box-shadow:0 4px 16px rgba(0,0,0,.3);
+}
+
+/* Toolbar flutuante */
+#flow-toolbar {
+  position:absolute; top:12px; right:12px; z-index:100;
+  display:flex; flex-direction:column; gap:6px;
+}
+.ftool-btn {
+  width:36px; height:36px; border-radius:8px;
+  background:var(--white); border:1px solid var(--border);
+  box-shadow:var(--shadow-sm); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px; transition:background .12s;
+}
+.ftool-btn:hover { background:var(--bg2); }
+
+/* Painel lateral de detalhes da dependência */
+#dep-panel {
+  position:fixed; top:50%; right:24px; transform:translateY(-50%);
+  width:240px; background:var(--white); border:1px solid var(--border);
+  border-radius:12px; box-shadow:var(--shadow-md); z-index:200;
+  padding:16px; display:none;
+}
+
+/* Legenda de status */
+.flow-legend { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.leg-item    { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text3); }
+.leg-dot     { width:10px; height:10px; border-radius:50%; }
+</style>
+
+<!-- Legenda -->
+<div class="flow-legend">
+  <div class="leg-item"><div class="leg-dot" style="background:#94a3b8"></div>Backlog</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#64748b"></div>A fazer</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#0ea5e9"></div>Em progresso</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#a855f7"></div>Review</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#34d399"></div>Concluído</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#fbbf24"></div>Bloqueado</div>
+  {% if can_edit %}
+  <div class="leg-item" style="margin-left:auto;color:var(--text2)">
+    Clique em <strong>🔗 Conectar</strong> e depois clique na tarefa de origem → depois na tarefa destino para criar dependência. Clique na seta para remover.
+  </div>
+  {% endif %}
+</div>
+
+<!-- Canvas do fluxograma -->
+<div id="flow-canvas">
+  <svg id="flow-svg">
+    <defs>
+      <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="#94a3b8" id="arrow-fill"/>
+      </marker>
+      <marker id="arrowhead-active" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="var(--accent)"/>
+      </marker>
+    </defs>
+    <g id="arrows-group"></g>
+    <line id="temp-arrow" x1="0" y1="0" x2="0" y2="0"
+          stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 3"
+          marker-end="url(#arrowhead)" style="display:none; pointer-events:none"/>
+  </svg>
+  <div id="nodes-container"></div>
+  <div id="flow-toolbar">
+    <button class="ftool-btn" onclick="autoLayout()" title="Auto-organizar">⟳</button>
+    <button class="ftool-btn" onclick="zoomIn()" title="Zoom +">+</button>
+    <button class="ftool-btn" onclick="zoomOut()" title="Zoom -">−</button>
+    <button class="ftool-btn" onclick="fitView()" title="Ajustar à tela">⤢</button>
+  </div>
+</div>
+
+<!-- Dica modo conectar -->
+<div id="connect-hint">
+  <span id="connect-hint-text">Clique na tarefa de <strong>origem</strong> (precisa estar pronta antes)</span>
+  <button onclick="cancelConnect()" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:14px;padding:0 0 0 8px">✕</button>
+</div>
+
+<!-- Painel de remoção de dependência -->
+<div id="dep-panel">
+  <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:12px">Dependência</div>
+  <div id="dep-panel-info" style="font-size:11px;color:var(--text2);margin-bottom:16px;line-height:1.5"></div>
+  {% if can_edit %}
+  <button onclick="removeSelectedDep()"
+          style="width:100%;padding:7px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer">
+    🗑 Remover dependência
+  </button>
+  {% endif %}
+  <button onclick="closeDepPanel()" style="width:100%;margin-top:6px;padding:7px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer">Fechar</button>
+</div>
+
+<script>
+const TASKS    = {{ tasks_json|safe }};
+const DEPS     = {{ deps_json|safe }};
+const CAN_EDIT = {{ can_edit|yesno:"true,false" }};
+const ADD_URL  = "{% url 'projects:flow_add' pk=project.pk %}";
+const REM_URL  = "{% url 'projects:flow_remove' pk=project.pk %}";
+const CSRF     = "{{ csrf_token }}";
+
+// ── Estado ──────────────────────────────────────────────────────────────────
+const positions = {};   // {id: {x, y}}
+const deps      = [...DEPS];
+let connectMode  = false;
+let connectSource = null;
+let selectedDep  = null;
+let zoom = 1;
+let isDragging = false, dragNode = null, dragOX = 0, dragOY = 0;
+
+const canvas   = document.getElementById('flow-canvas');
+const nodesEl  = document.getElementById('nodes-container');
+const arrowsG  = document.getElementById('arrows-group');
+const tempArrow= document.getElementById('temp-arrow');
+const hint     = document.getElementById('connect-hint');
+const hintText = document.getElementById('connect-hint-text');
+
+// ── Layout automático (topológico em colunas) ─────────────────────────────
+function computeLevels() {
+  const levels = {};
+  const inDeg  = {};
+  TASKS.forEach(t => { inDeg[t.id] = 0; });
+  deps.forEach(d => { inDeg[d.to] = (inDeg[d.to] || 0) + 1; });
+
+  const queue = TASKS.filter(t => (inDeg[t.id] || 0) === 0).map(t => t.id);
+  queue.forEach(id => levels[id] = 0);
+
+  while (queue.length) {
+    const cur = queue.shift();
+    deps.filter(d => d.from === cur).forEach(d => {
+      levels[d.to] = Math.max(levels[d.to] || 0, (levels[cur] || 0) + 1);
+      inDeg[d.to]--;
+      if (inDeg[d.to] === 0) queue.push(d.to);
+    });
+  }
+  return levels;
+}
+
+function autoLayout() {
+  const levels = computeLevels();
+  const COL_W  = 260, ROW_H = 130, PAD_X = 40, PAD_Y = 60;
+  const cols   = {};
+  TASKS.forEach(t => {
+    const lv = levels[t.id] ?? 0;
+    cols[lv] = cols[lv] || [];
+    cols[lv].push(t.id);
+  });
+  Object.entries(cols).forEach(([lv, ids]) => {
+    ids.forEach((id, i) => {
+      positions[id] = { x: PAD_X + lv * COL_W, y: PAD_Y + i * ROW_H };
+    });
+  });
+  renderAll();
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function renderAll() {
+  renderNodes();
+  renderArrows();
+}
+
+function renderNodes() {
+  nodesEl.innerHTML = '';
+  TASKS.forEach(t => {
+    const pos = positions[t.id] || { x: 40, y: 40 };
+    const el  = document.createElement('div');
+    el.className = 'flow-node' + (t.blocked ? ' blocked-node' : '');
+    el.dataset.id = t.id;
+    el.style.left = pos.x + 'px';
+    el.style.top  = pos.y + 'px';
+
+    const avatarsHtml = t.assignees.slice(0,3).map(a =>
+      `<div class="node-avatar" style="background:${a.color}" title="${a.name}">${a.initials}</div>`
+    ).join('');
+
+    el.innerHTML = `
+      <div class="node-header">
+        <div class="node-title">${escHtml(t.title)}</div>
+      </div>
+      <div class="node-body">
+        <div style="display:flex;align-items:center;gap:5px">
+          <div class="node-status-dot" style="background:${t.color}"></div>
+          <span style="font-size:10px;color:var(--text3)">${statusLabel(t.status, t.blocked)}</span>
+        </div>
+        <div class="node-avatars">${avatarsHtml}</div>
+      </div>`;
+
+    // Drag
+    el.addEventListener('mousedown', onNodeMouseDown);
+    el.addEventListener('click', onNodeClick);
+    // Hover no modo conectar
+    el.addEventListener('mouseenter', () => {
+      if (connectMode && connectSource && connectSource !== t.id)
+        el.classList.add('connect-hover');
+    });
+    el.addEventListener('mouseleave', () => el.classList.remove('connect-hover'));
+
+    nodesEl.appendChild(el);
+  });
+}
+
+function renderArrows() {
+  arrowsG.innerHTML = '';
+  deps.forEach(d => drawArrow(d));
+}
+
+function drawArrow(dep) {
+  const fromPos = nodeCenter(dep.from, 'right');
+  const toPos   = nodeCenter(dep.to,   'left');
+  if (!fromPos || !toPos) return;
+
+  const dx = toPos.x - fromPos.x;
+  const dy = toPos.y - fromPos.y;
+  const cx1 = fromPos.x + Math.max(60, dx * 0.4);
+  const cy1 = fromPos.y;
+  const cx2 = toPos.x   - Math.max(60, dx * 0.4);
+  const cy2 = toPos.y;
+  const pathD = `M${fromPos.x},${fromPos.y} C${cx1},${cy1} ${cx2},${cy2} ${toPos.x},${toPos.y}`;
+
+  // Seta visível
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', pathD);
+  path.setAttribute('class', 'dep-arrow');
+  path.dataset.depId = dep.id;
+
+  // Área de clique invisível (mais grossa)
+  const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  hit.setAttribute('d', pathD);
+  hit.setAttribute('class', 'dep-arrow-hit');
+  hit.style.pointerEvents = 'stroke';
+  hit.dataset.depId = dep.id;
+  hit.addEventListener('click', () => openDepPanel(dep));
+
+  arrowsG.appendChild(path);
+  arrowsG.appendChild(hit);
+}
+
+function nodeCenter(id, side) {
+  const pos = positions[id];
+  if (!pos) return null;
+  const NODE_W = 200, NODE_H = 72;
+  if (side === 'right') return { x: pos.x + NODE_W, y: pos.y + NODE_H / 2 };
+  if (side === 'left')  return { x: pos.x,           y: pos.y + NODE_H / 2 };
+  return { x: pos.x + NODE_W / 2, y: pos.y + NODE_H / 2 };
+}
+
+// ── Drag & Drop ──────────────────────────────────────────────────────────────
+function onNodeMouseDown(e) {
+  if (connectMode) return;
+  if (e.button !== 0) return;
+  isDragging = true;
+  dragNode   = e.currentTarget.dataset.id;
+  const pos  = positions[dragNode];
+  const rect = canvas.getBoundingClientRect();
+  dragOX = e.clientX - rect.left - pos.x;
+  dragOY = e.clientY - rect.top  - pos.y;
+  e.preventDefault();
+}
+document.addEventListener('mousemove', e => {
+  if (!isDragging || !dragNode) return;
+  const rect = canvas.getBoundingClientRect();
+  positions[dragNode] = {
+    x: Math.max(0, e.clientX - rect.left - dragOX),
+    y: Math.max(0, e.clientY - rect.top  - dragOY),
+  };
+  const el = nodesEl.querySelector(`[data-id="${dragNode}"]`);
+  if (el) { el.style.left = positions[dragNode].x + 'px'; el.style.top = positions[dragNode].y + 'px'; }
+  renderArrows();
+});
+document.addEventListener('mouseup', () => { isDragging = false; dragNode = null; });
+
+// Mouse move para seta temporária no modo conectar
+canvas.addEventListener('mousemove', e => {
+  if (!connectMode || !connectSource) return;
+  const rect = canvas.getBoundingClientRect();
+  const from = nodeCenter(connectSource, 'right');
+  if (!from) return;
+  tempArrow.setAttribute('x1', from.x); tempArrow.setAttribute('y1', from.y);
+  tempArrow.setAttribute('x2', e.clientX - rect.left);
+  tempArrow.setAttribute('y2', e.clientY - rect.top);
+  tempArrow.style.display = 'block';
+});
+
+// ── Modo conectar ────────────────────────────────────────────────────────────
+function toggleConnectMode() {
+  connectMode = !connectMode;
+  connectSource = null;
+  tempArrow.style.display = 'none';
+  document.body.classList.toggle('connect-mode', connectMode);
+  hint.style.display = connectMode ? 'flex' : 'none';
+  hintText.innerHTML = 'Clique na tarefa de <strong>origem</strong> (precisa estar pronta antes)';
+  document.getElementById('btn-connect').style.background = connectMode ? 'var(--accent)' : '';
+  document.getElementById('btn-connect').style.color      = connectMode ? '#fff' : '';
+}
+
+function cancelConnect() {
+  connectMode  = false;
+  connectSource = null;
+  tempArrow.style.display = 'none';
+  document.body.classList.remove('connect-mode');
+  hint.style.display = 'none';
+  document.getElementById('btn-connect').style.background = '';
+  document.getElementById('btn-connect').style.color = '';
+  nodesEl.querySelectorAll('.flow-node').forEach(n => n.classList.remove('connect-source','connect-hover'));
+}
+
+function onNodeClick(e) {
+  if (isDragging) return;
+  const id = e.currentTarget.dataset.id;
+
+  if (connectMode && CAN_EDIT) {
+    if (!connectSource) {
+      // Seleciona origem
+      connectSource = id;
+      e.currentTarget.classList.add('connect-source');
+      hintText.innerHTML = 'Agora clique na tarefa <strong>destino</strong> (que precisa esperar)';
+    } else if (connectSource !== id) {
+      // Cria dependência
+      createDep(connectSource, id);
+      cancelConnect();
+    }
+    return;
+  }
+
+  // Abre tarefa
+  const task = TASKS.find(t => t.id === id);
+  if (task) window.open(task.url, '_blank');
+}
+
+async function createDep(fromId, toId) {
+  const res = await fetch(ADD_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body: JSON.stringify({from: fromId, to: toId}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    if (data.created) {
+      deps.push({id: data.id, from: fromId, to: toId});
+      renderArrows();
+    }
+  } else {
+    alert(data.error || 'Erro ao criar dependência.');
+  }
+}
+
+// ── Painel de dependência ────────────────────────────────────────────────────
+function openDepPanel(dep) {
+  if (connectMode) return;
+  selectedDep = dep;
+  const fromTask = TASKS.find(t => t.id === dep.from);
+  const toTask   = TASKS.find(t => t.id === dep.to);
+  document.getElementById('dep-panel-info').innerHTML =
+    `<strong>${escHtml(fromTask?.title || '?')}</strong><br>
+     <span style="color:var(--accent)">↓ precisa estar concluída antes de</span><br>
+     <strong>${escHtml(toTask?.title || '?')}</strong>`;
+  document.getElementById('dep-panel').style.display = 'block';
+}
+
+function closeDepPanel() {
+  document.getElementById('dep-panel').style.display = 'none';
+  selectedDep = null;
+}
+
+async function removeSelectedDep() {
+  if (!selectedDep) return;
+  const res = await fetch(REM_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body: JSON.stringify({dep_id: selectedDep.id}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    const idx = deps.findIndex(d => d.id === selectedDep.id);
+    if (idx !== -1) deps.splice(idx, 1);
+    renderArrows();
+    closeDepPanel();
+  }
+}
+
+// ── Zoom ─────────────────────────────────────────────────────────────────────
+function zoomIn()  { zoom = Math.min(2,   zoom + 0.1); applyZoom(); }
+function zoomOut() { zoom = Math.max(0.4, zoom - 0.1); applyZoom(); }
+function applyZoom() {
+  nodesEl.style.transform = `scale(${zoom})`;
+  nodesEl.style.transformOrigin = '0 0';
+  document.getElementById('flow-svg').style.transform = `scale(${zoom})`;
+  document.getElementById('flow-svg').style.transformOrigin = '0 0';
+}
+function fitView() { zoom = 1; applyZoom(); }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function statusLabel(status, blocked) {
+  if (blocked) return 'Bloqueado';
+  const map = {backlog:'Backlog',todo:'A fazer',in_progress:'Em progresso',review:'Review',done:'Concluído'};
+  return map[status] || status;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+autoLayout();
+</script>
+{% endblock %}

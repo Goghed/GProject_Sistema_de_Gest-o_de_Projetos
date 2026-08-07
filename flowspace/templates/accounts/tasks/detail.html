@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}{{ task.title }} — G Project{% endblock %}
+{% block topbar_left %}
+<div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:1px">
+    <a href="{% url 'projects:dashboard' %}" style="color:var(--text3)">Projetos</a> /
+    <a href="{% url 'projects:kanban' pk=task.project.pk %}" style="color:var(--text3)">{{ task.project.name }}</a>
+  </div>
+  <div class="topbar-title">{{ task.title|truncatechars:50 }}</div>
+</div>
+{% endblock %}
+{% block topbar_actions %}
+<a href="{% url 'projects:kanban' pk=task.project.pk %}" class="btn btn-ghost btn-sm">← Voltar ao Board</a>
+<button class="btn btn-danger btn-sm" onclick="deleteTask()">Excluir</button>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+.task-layout { display:grid; grid-template-columns:1fr 300px; gap:20px; }
+.subtask-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px; background:var(--surface2); margin-bottom:6px; cursor:pointer; transition:background .14s; }
+.subtask-item:hover { background:var(--surface3); }
+.check-box { width:16px; height:16px; border-radius:4px; border:1.5px solid var(--border2); display:flex; align-items:center; justify-content:center; font-size:10px; transition:all .15s; flex-shrink:0; }
+.check-box.done { background:var(--accent); border-color:var(--accent); color:#fff; }
+.subtask-text { font-size:13px; color:var(--text); flex:1; }
+.subtask-text.done { text-decoration:line-through; color:var(--text3); }
+.comment { display:flex; gap:10px; padding:12px 0; border-bottom:1px solid var(--border); }
+.comment:last-child { border-bottom:none; }
+.comment-body { flex:1; }
+.comment-meta { font-size:11px; color:var(--text3); margin-bottom:4px; }
+.comment-text { font-size:13px; color:var(--text); line-height:1.6; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="task-layout">
+  <!-- Main content -->
+  <div>
+    <!-- Header card -->
+    <div class="card" style="margin-bottom:14px;border-left:4px solid {{ task.project.color }}">
+      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px">
+        <div style="flex:1">
+          <h1 style="font-family:var(--syne);font-size:20px;font-weight:800;color:var(--text);letter-spacing:-0.5px;line-height:1.3;margin-bottom:8px" id="task-title" contenteditable="true" onblur="saveField('title',this.textContent)">{{ task.title }}</h1>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span class="badge badge-{{ task.priority }}">{{ task.get_priority_display }}</span>
+            <span class="badge badge-{{ task.status }}">{{ task.get_status_display }}</span>
+            {% for tag in task.tag_list %}<span style="font-size:10px;background:{{ task.project.color }}15;color:{{ task.project.color }};padding:2px 7px;border-radius:10px;font-weight:600">{{ tag }}</span>{% endfor %}
+          </div>
+        </div>
+      </div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7" id="task-desc" contenteditable="true" onblur="saveField('description',this.textContent)" style="outline:none">
+        {% if task.description %}{{ task.description }}{% else %}<span style="color:var(--text3)">Clique para adicionar uma descrição...</span>{% endif %}
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">Progresso</div>
+        <div style="font-family:var(--syne);font-size:18px;font-weight:800;color:var(--accent)" id="progress-label">{{ task.progress }}%</div>
+      </div>
+      <div class="progress" style="height:8px">
+        <div class="progress-fill" id="progress-bar" style="width:{{ task.progress }}%;background:{{ task.project.color }}"></div>
+      </div>
+      <input type="range" min="0" max="100" value="{{ task.progress }}" style="width:100%;margin-top:10px;accent-color:{{ task.project.color }}" oninput="updateProgress(this.value)">
+    </div>
+
+    <!-- Subtasks -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px">
+        Subtarefas
+        <span style="color:var(--text3);font-weight:400;margin-left:4px">{{ task.done_subtasks_count }}/{{ task.subtasks.count }}</span>
+      </div>
+      <div id="subtasks-list">
+        {% for st in task.subtasks.all %}
+        <div class="subtask-item" id="st-{{ st.id }}" onclick="toggleSubtask('{{ st.id }}')">
+          <div class="check-box {% if st.done %}done{% endif %}" id="check-{{ st.id }}">{% if st.done %}✓{% endif %}</div>
+          <div class="subtask-text {% if st.done %}done{% endif %}" id="sttext-{{ st.id }}">{{ st.title }}</div>
+        </div>
+        {% empty %}
+        <p style="font-size:12px;color:var(--text3)">Nenhuma subtarefa. Adicione no formulário de edição.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Comments -->
+    <div class="card">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:14px">Comentários</div>
+      <div id="comments-list">
+        {% for c in task.comments.all %}
+        <div class="comment">
+          <div class="avatar" style="background:{{ c.author.avatar_color|default:'#888' }};font-size:10px;flex-shrink:0;margin-top:2px">{{ c.author.initials|default:"?" }}</div>
+          <div class="comment-body">
+            <div class="comment-meta">{{ c.author }} · {{ c.created_at|date:"d/m/Y H:i" }}</div>
+            <div class="comment-text">{{ c.content }}</div>
+          </div>
+        </div>
+        {% empty %}
+        <p style="font-size:12px;color:var(--text3);margin-bottom:14px">Nenhum comentário ainda.</p>
+        {% endfor %}
+      </div>
+      <form id="comment-form" style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        {% csrf_token %}
+        <div class="avatar" style="background:{{ request.user.avatar_color }};font-size:10px;flex-shrink:0;margin-top:4px">{{ request.user.initials }}</div>
+        <div style="flex:1">
+          <textarea name="content" class="form-control" rows="2" placeholder="Adicionar comentário..." style="resize:none"></textarea>
+          <button type="submit" class="btn btn-primary btn-sm" style="margin-top:6px">Comentar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Sidebar info -->
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div class="card">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px">Detalhes</div>
+      <table style="width:100%;font-size:12px">
+        <tr>
+          <td style="color:var(--text3);padding:5px 0;width:100px">Projeto</td>
+          <td><a href="{% url 'projects:kanban' pk=task.project.pk %}" style="display:flex;align-items:center;gap:5px">
+            <span style="width:7px;height:7px;border-radius:50%;background:{{ task.project.color }}"></span>
+            {{ task.project.name }}
+          </a></td>
+        </tr>
+        <tr>
+          <td style="color:var(--text3);padding:5px 0">Status</td>
+          <td>
+            <select onchange="saveField('status',this.value)" class="form-control" style="padding:3px 6px;font-size:11px">
+              {% for val, label in task.STATUS_CHOICES %}
+              <option value="{{ val }}" {% if task.status == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--text3);padding:5px 0">Prioridade</td>
+          <td>
+            <select onchange="saveField('priority',this.value)" class="form-control" style="padding:3px 6px;font-size:11px">
+              {% for val, label in task.PRIORITY_CHOICES %}
+              <option value="{{ val }}" {% if task.priority == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--text3);padding:5px 0">Prazo</td>
+          <td><input type="date" value="{{ task.due_date|date:'Y-m-d'|default:'' }}" class="form-control" style="padding:3px 6px;font-size:11px" onchange="saveField('due_date',this.value)"></td>
+        </tr>
+        <tr>
+          <td style="color:var(--text3);padding:5px 0">Criado</td>
+          <td style="color:var(--text2)">{{ task.created_at|date:"d/m/Y" }}</td>
+        </tr>
+        {% if task.completed_at %}
+        <tr>
+          <td style="color:var(--text3);padding:5px 0">Concluído</td>
+          <td style="color:#059669">{{ task.completed_at|date:"d/m/Y" }}</td>
+        </tr>
+        {% endif %}
+      </table>
+    </div>
+
+    <div class="card">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Responsáveis</div>
+      {% for a in task.assignees.all %}
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 0">
+        <div class="avatar" style="background:{{ a.avatar_color }}">{{ a.initials }}</div>
+        <div>
+          <div style="font-size:12px;font-weight:500">{{ a }}</div>
+          <div style="font-size:10px;color:var(--text3)">{{ a.job_title|default:a.get_role_display }}</div>
+        </div>
+      </div>
+      {% empty %}
+      <p style="font-size:12px;color:var(--text3)">Nenhum responsável.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const TASK_PK = "{{ task.pk }}";
+const CSRF    = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+async function saveField(field, value) {
+  const body = {}; body[field] = value;
+  await fetch(`/tasks/${TASK_PK}/update/`, {
+    method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body: JSON.stringify(body)
+  });
+}
+
+function updateProgress(val) {
+  document.getElementById('progress-label').textContent = val + '%';
+  document.getElementById('progress-bar').style.width = val + '%';
+  saveField('progress', parseInt(val));
+}
+
+async function toggleSubtask(stId) {
+  const r = await fetch(`/tasks/subtask/${stId}/toggle/`, {method:'POST',headers:{'X-CSRFToken':CSRF}});
+  const d = await r.json();
+  if (d.ok) {
+    const box  = document.getElementById('check-' + stId);
+    const text = document.getElementById('sttext-' + stId);
+    box.classList.toggle('done', d.done);
+    box.textContent = d.done ? '✓' : '';
+    text.classList.toggle('done', d.done);
+    document.getElementById('progress-label').textContent = d.progress + '%';
+    document.getElementById('progress-bar').style.width = d.progress + '%';
+  }
+}
+
+async function deleteTask() {
+  if (!confirm('Excluir esta tarefa?')) return;
+  const r = await fetch(`/tasks/${TASK_PK}/delete/`, {method:'POST',headers:{'X-CSRFToken':CSRF}});
+  const d = await r.json();
+  if (d.ok) window.location.href = d.redirect;
+}
+
+document.getElementById('comment-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const r  = await fetch(`/tasks/${TASK_PK}/comment/`, {method:'POST',body:fd,headers:{'X-CSRFToken':CSRF}});
+  const d  = await r.json();
+  if (d.ok) {
+    const el = document.createElement('div');
+    el.className = 'comment';
+    el.innerHTML = `<div class="avatar" style="background:${d.color};font-size:10px;flex-shrink:0;margin-top:2px">${d.initials}</div><div class="comment-body"><div class="comment-meta">${d.author} · ${d.created_at}</div><div class="comment-text">${d.content}</div></div>`;
+    document.getElementById('comments-list').appendChild(el);
+    e.target.reset();
+  }
+});
+</script>
+{% endblock %}

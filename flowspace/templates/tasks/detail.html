@@ -1,0 +1,1067 @@
+{% extends "base.html" %}
+{% block title %}{{ task.title }} — FlowSpace{% endblock %}
+{% block topbar_left %}
+<div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:1px">
+    <a href="{% url 'projects:dashboard' %}" style="color:var(--text3)">Projetos</a> /
+    <a href="{% url 'projects:kanban' pk=task.project.pk %}" style="color:var(--text3)">{{ task.project.name }}</a>
+  </div>
+  <div class="topbar-title">{{ task.title|truncatechars:50 }}</div>
+</div>
+{% endblock %}
+{% block topbar_actions %}
+<a href="{% url 'projects:kanban' pk=task.project.pk %}" class="btn btn-ghost btn-sm">← Voltar ao Board</a>
+<button class="btn btn-danger btn-sm" onclick="deleteTask()">Excluir</button>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+.task-layout { display:grid; grid-template-columns:1fr 300px; gap:20px; }
+.subtask-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px; background:var(--surface2); margin-bottom:6px; cursor:pointer; transition:background .14s; }
+.subtask-item:hover { background:var(--surface3); }
+.check-box { width:16px; height:16px; border-radius:4px; border:1.5px solid var(--border2); display:flex; align-items:center; justify-content:center; font-size:10px; transition:all .15s; flex-shrink:0; }
+.check-box.done { background:var(--accent); border-color:var(--accent); color:#fff; }
+.subtask-text { font-size:13px; color:var(--text); flex:1; }
+.subtask-text.done { text-decoration:line-through; color:var(--text3); }
+.comment { display:flex; gap:10px; padding:12px 0; border-bottom:1px solid var(--border); }
+.comment:last-child { border-bottom:none; }
+.comment-body { flex:1; }
+.comment-meta { font-size:11px; color:var(--text3); margin-bottom:4px; }
+.comment-text { font-size:13px; color:var(--text); line-height:1.6; }
+/* Issue / bloqueio */
+.issue-banner { padding:14px 16px; border-radius:10px; margin-bottom:14px; border:1px solid; animation:slideIn .25s ease; }
+.issue-open   { background:rgba(255,107,107,.08); border-color:rgba(255,107,107,.3); }
+.issue-title  { font-size:13px; font-weight:700; color:#dc2626; margin-bottom:4px; }
+.issue-desc   { font-size:12px; color:var(--text2); line-height:1.6; }
+@keyframes pulse-border { 0%,100%{box-shadow:0 0 0 0 rgba(255,107,107,.4)} 50%{box-shadow:0 0 0 6px rgba(255,107,107,0)} }
+.blocked-card { animation:pulse-border 2s infinite; }
+/* Conversa da issue */
+.ic-thread { margin-top:14px; padding-top:12px; border-top:1px solid rgba(255,107,107,.2); display:flex; flex-direction:column; gap:10px; }
+.ic-msg { display:flex; gap:8px; }
+.ic-bubble { flex:1; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:8px 11px; }
+.ic-meta { font-size:10px; color:var(--text3); margin-bottom:3px; display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.ic-text { font-size:12px; color:var(--text); line-height:1.55; word-break:break-word; }
+.ic-text .mention { color:#60a5fa; font-weight:600; }
+.ic-edit-btn { background:none; border:none; cursor:pointer; color:var(--text3); padding:2px 4px; border-radius:4px; font-size:11px; line-height:1; transition:color .15s,background .15s; flex-shrink:0; }
+.ic-edit-btn:hover { color:var(--text2); background:rgba(255,255,255,.07); }
+.ic-edit-area { width:100%; background:rgba(255,255,255,.05); border:1px solid rgba(91,76,245,.3); border-radius:8px; color:var(--text); font-size:12px; padding:7px 10px; resize:none; outline:none; font-family:inherit; margin-top:4px; }
+.ic-edit-area:focus { border-color:rgba(91,76,245,.6); }
+.ic-edit-actions { display:flex; gap:6px; margin-top:5px; }
+.ic-form { display:flex; gap:7px; margin-top:4px; position:relative; }
+.ic-form textarea { flex:1; background:rgba(255,255,255,.05); border:1px solid rgba(255,107,107,.25); border-radius:8px; color:var(--text); font-size:12px; padding:7px 10px; resize:none; outline:none; font-family:inherit; }
+.ic-form textarea:focus { border-color:rgba(255,107,107,.5); }
+.ic-mention-list { position:absolute; bottom:calc(100% + 4px); left:0; background:var(--white); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.2); min-width:180px; z-index:200; overflow:hidden; display:none; }
+.ic-mention-item { padding:7px 12px; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:7px; }
+.ic-mention-item:hover { background:var(--surface2); }
+
+/* Dependencies */
+.dep-item { display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:7px;background:var(--surface2);margin-bottom:5px; }
+.dep-item.dep-done { opacity:0.55; }
+.dep-dot { width:7px;height:7px;border-radius:50%;flex-shrink:0;background:#f59e0b; }
+.dep-item.dep-done .dep-dot { background:#22c55e; }
+.dep-title { flex:1;color:var(--text);text-decoration:none;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.dep-title:hover { color:var(--accent); }
+.dep-rm { background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;padding:2px 5px;border-radius:4px;flex-shrink:0;line-height:1; }
+.dep-rm:hover { color:#dc2626;background:rgba(220,38,38,.1); }
+/* Attachment */
+.attach-item { display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--surface2);border-radius:8px;margin-bottom:7px; }
+.attach-icon { font-size:20px;flex-shrink:0; }
+.attach-name { font-size:12px;font-weight:500;color:var(--text);flex:1;word-break:break-all; }
+.attach-meta { font-size:10px;color:var(--text3); }
+.attach-img  { width:100%;border-radius:8px;margin-bottom:8px;cursor:pointer;max-height:200px;object-fit:cover; }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="task-layout">
+  <!-- Main content -->
+  <div>
+
+    <!-- Banner de bloqueio -->
+    {% if task.is_blocked and open_issue %}
+    <div class="issue-banner issue-open blocked-card" id="issue-banner">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div class="issue-title" style="margin-bottom:0">🚨 Tarefa Bloqueada — Problema em Aberto</div>
+        {% if open_issue.reason %}
+        <span style="font-size:11px;font-weight:600;background:rgba(220,38,38,.12);color:#dc2626;padding:2px 8px;border-radius:20px;white-space:nowrap">{{ open_issue.get_reason_display }}</span>
+        {% endif %}
+      </div>
+      <div class="issue-desc"><strong>{{ open_issue.reported_by }}</strong> reportou: {{ open_issue.description }}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px">{{ open_issue.created_at|date:"d/m/Y H:i" }}</div>
+      <!-- Conversa de resolução -->
+      <div class="ic-thread" id="ic-thread">
+        {% for ic in open_issue.comments.all %}
+        <div class="ic-msg" id="ic-msg-{{ ic.id }}">
+          <div class="avatar" style="background:{{ ic.author.avatar_color }};font-size:9px;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700">{{ ic.author.initials }}</div>
+          <div class="ic-bubble">
+            <div class="ic-meta">
+              <span>{{ ic.author.get_full_name|default:ic.author.username }} · {{ ic.created_at|date:"d/m/Y H:i" }}</span>
+              {% if ic.author == request.user %}
+              <button class="ic-edit-btn" onclick="icStartEdit('{{ ic.id }}', this)" title="Editar">✏</button>
+              {% endif %}
+            </div>
+            <div class="ic-text" id="ic-text-{{ ic.id }}">{{ ic.content|linebreaksbr }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Formulário de comentário -->
+      <div style="margin-top:10px;position:relative">
+        <div class="ic-form">
+          <div class="avatar" style="background:{{ request.user.avatar_color }};font-size:9px;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700">{{ request.user.initials }}</div>
+          <div style="flex:1;position:relative">
+            <div class="ic-mention-list" id="ic-mention-list"></div>
+            <textarea id="ic-input" rows="2" placeholder="Digite sua mensagem... use @nome para mencionar alguém" oninput="icHandleInput(this)" onkeydown="icHandleKey(event)"></textarea>
+          </div>
+          <button onclick="icSend('{{ open_issue.id }}')" class="btn btn-sm" style="background:rgba(220,38,38,.15);color:#dc2626;border:1px solid rgba(220,38,38,.3);align-self:flex-end;white-space:nowrap">Enviar</button>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;padding-left:36px">
+          Digite <b>@nome</b> para mencionar um membro do projeto
+        </div>
+      </div>
+
+      {% if can_create %}
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,107,107,.2)">
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">Resolver o problema:</div>
+        <textarea id="issue-response" class="form-control" rows="2" placeholder="Descreva como o problema foi resolvido..."></textarea>
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin:10px 0 6px">Criar tarefa de suporte (opcional):</div>
+        <input type="text" id="support-title" class="form-control" placeholder="Ex: Comprar cabo UTP Cat6" style="margin-bottom:6px">
+        <select id="support-assignee" class="form-control" style="margin-bottom:10px">
+          <option value="">— Responsável pela tarefa de suporte —</option>
+          {% for u in all_users %}
+          <option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}</option>
+          {% endfor %}
+        </select>
+        <button onclick="resolveIssue('{{ open_issue.id }}')" class="btn btn-primary btn-sm">✓ Resolver e Desbloquear</button>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# ── Banner de dependências pendentes ── #}
+    {% if has_pending_deps and task.status == "todo" %}
+    <div style="margin-bottom:14px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:14px 18px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:16px">🔒</span>
+        <div style="font-size:13px;font-weight:700;color:#d97706">Início bloqueado por dependências</div>
+      </div>
+      <div style="font-size:12px;color:var(--text2)">Esta tarefa só pode ser iniciada após a conclusão das tarefas abaixo:</div>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
+        {% for dep in blockers %}
+          {% if dep.requires.status != "done" %}
+          <div style="display:flex;align-items:center;gap:7px;font-size:12px">
+            <span style="color:#f59e0b">●</span>
+            <a href="/tasks/{{ dep.requires.pk }}/" style="color:var(--text);font-weight:500">{{ dep.requires.title|truncatechars:50 }}</a>
+            <span class="badge badge-{{ dep.requires.status }}" style="font-size:9px">{{ dep.requires.get_status_display }}</span>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Banner de próxima ação (fluxo de status) ── #}
+    {% if not task.is_blocked %}
+
+      {% if task.status == "backlog" %}
+      <div id="action-banner" style="margin-bottom:14px;background:linear-gradient(135deg,rgba(148,163,184,.08),rgba(100,116,139,.08));border:1px solid rgba(148,163,184,.3);border-radius:12px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">Tarefa no Backlog</div>
+          <div style="font-size:12px;color:var(--text3)">Assuma esta tarefa para movê-la para <b>A Fazer</b> e tornar-se responsável.</div>
+        </div>
+        <button onclick="advanceTask()" id="action-btn" class="btn btn-primary" style="white-space:nowrap;flex-shrink:0;background:#475569;border-color:#475569;font-size:13px;padding:8px 18px">
+          📋 A Fazer
+        </button>
+      </div>
+
+      {% elif task.status == "todo" and is_assignee %}
+      <div id="action-banner" style="margin-bottom:14px;background:linear-gradient(135deg,rgba(14,165,233,.08),rgba(91,76,245,.08));border:1px solid rgba(14,165,233,.25);border-radius:12px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">Tarefa aguardando início</div>
+          <div style="font-size:12px;color:var(--text3)">Clique para começar a trabalhar nesta tarefa.</div>
+        </div>
+        <button onclick="advanceTask()" id="action-btn" class="btn btn-primary" style="white-space:nowrap;flex-shrink:0;background:#0ea5e9;border-color:#0ea5e9;font-size:13px;padding:8px 18px">
+          ▶ Colocar em Progresso
+        </button>
+      </div>
+
+      {% elif task.status == "in_progress" and is_assignee %}
+      <div id="action-banner" style="margin-bottom:14px;background:linear-gradient(135deg,rgba(52,211,153,.08),rgba(16,185,129,.08));border:1px solid rgba(52,211,153,.3);border-radius:12px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">
+            {% if task.progress == 100 %}✅ Todas as subtarefas concluídas!{% else %}Tarefa em andamento{% endif %}
+          </div>
+          <div style="font-size:12px;color:var(--text3)">
+            {% if task.needs_review %}Envie para revisão do gestor quando terminar.{% else %}Marque como concluída quando terminar.{% endif %}
+          </div>
+        </div>
+        <button onclick="advanceTask()" id="action-btn" class="btn btn-primary" style="white-space:nowrap;flex-shrink:0;background:#059669;border-color:#059669;font-size:13px;padding:8px 18px">
+          {% if task.needs_review %}📋 Enviar para Review{% else %}✅ Concluir Tarefa{% endif %}
+        </button>
+      </div>
+      <div id="report-issue-bar" style="margin-bottom:14px;text-align:right">
+        <button onclick="openReportIssue()" class="btn btn-sm" style="background:rgba(255,107,107,.1);color:#dc2626;border:1px solid rgba(255,107,107,.3)">
+          🚨 Reportar Problema
+        </button>
+      </div>
+
+      {% elif task.status == "review" and can_create %}
+      <div id="action-banner" style="margin-bottom:14px;background:linear-gradient(135deg,rgba(245,158,11,.08),rgba(234,179,8,.08));border:1px solid rgba(245,158,11,.35);border-radius:12px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">📋 Tarefa aguardando revisão</div>
+          <div style="font-size:12px;color:var(--text3)">Revise o trabalho realizado e aprove para concluir a tarefa.</div>
+        </div>
+        <button onclick="advanceTask()" id="action-btn" class="btn btn-primary" style="white-space:nowrap;flex-shrink:0;background:#d97706;border-color:#d97706;font-size:13px;padding:8px 18px">
+          ✓ Aprovar e Concluir
+        </button>
+      </div>
+
+      {% endif %}
+    {% endif %}
+
+    {% if today_day_num %}
+    <div id="checkin-card" style="margin-bottom:14px;background:var(--white);border:1.5px solid var(--border);border-radius:12px;padding:16px 18px">
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">
+        📅 Check-in de hoje — É possível executar a tarefa?
+      </div>
+      <div id="checkin-interactive">
+      {% if today_report %}
+        {% if today_report.accomplished %}
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#059669;font-weight:600">
+          <span style="background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3);border-radius:20px;padding:4px 12px">✓ Sim, vou executar hoje</span>
+          <button onclick="resetCheckin()" style="background:none;border:none;font-size:11px;color:var(--text3);cursor:pointer">Alterar</button>
+        </div>
+        {% else %}
+        <div style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#dc2626;font-weight:600;flex-direction:column">
+          <span style="background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.2);border-radius:20px;padding:4px 12px">✗ Não é possível hoje{% if today_report.notes %}: {{ today_report.notes }}{% endif %}</span>
+          <button onclick="resetCheckin()" style="background:none;border:none;font-size:11px;color:var(--text3);cursor:pointer">Alterar</button>
+        </div>
+        {% endif %}
+      {% else %}
+      <div id="checkin-btns" style="display:flex;gap:8px">
+        <button onclick="saveCheckin(true)" class="btn btn-sm" style="flex:1;background:rgba(52,211,153,.1);color:#059669;border:1px solid rgba(52,211,153,.3);font-weight:700">✓ Sim, consigo</button>
+        <button onclick="saveCheckin(false)" class="btn btn-sm" style="flex:1;background:rgba(220,38,38,.07);color:#dc2626;border:1px solid rgba(220,38,38,.2);font-weight:700">✗ Não é possível</button>
+      </div>
+      <div id="checkin-reason-wrap" style="display:none;margin-top:10px">
+        <input id="checkin-reason" type="text" placeholder="Motivo (ex: chuva, falta de material...)"
+          style="width:100%;border:1px solid var(--border2);border-radius:8px;padding:9px 12px;font-size:13px;background:var(--surface2);color:var(--text);outline:none;box-sizing:border-box">
+        <button onclick="confirmCheckinNo()" class="btn btn-sm" style="margin-top:8px;width:100%;background:#dc2626;color:#fff;border-color:#dc2626;font-weight:700">Confirmar</button>
+      </div>
+      {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Modal de reportar problema -->
+    <div class="modal-overlay" id="report-modal">
+      <div class="modal-box" style="max-width:460px">
+        <div class="modal-header">
+          <div class="modal-title">🚨 Reportar Problema</div>
+          <button class="modal-close" onclick="closeReportIssue()">✕</button>
+        </div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+          Descreva o problema ou o que está impedindo o avanço da tarefa. O gestor será notificado imediatamente.
+        </div>
+        <div class="form-group">
+          <label class="form-label">Motivo da Pausa *</label>
+          <select id="issue-reason" class="form-control">
+            <option value="obstacle">Obstáculo / Impedimento</option>
+            <option value="needs_info">Aguardando informação</option>
+            <option value="resource">Falta de recurso</option>
+            <option value="sick">Afastamento / Doença</option>
+            <option value="dependency">Dependência externa</option>
+            <option value="other">Outro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descrição do Problema *</label>
+          <textarea id="issue-description" class="form-control" rows="4"
+                    placeholder="Ex: O cabo UTP acabou e não temos estoque para continuar a instalação..."></textarea>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="submitIssue()" class="btn btn-primary" style="background:#dc2626;flex:1">Reportar Problema</button>
+          <button onclick="closeReportIssue()" class="btn btn-ghost">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Header card -->
+    <div class="card" style="margin-bottom:14px;border-left:4px solid {{ task.project.color }}">
+      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px">
+        <div style="flex:1">
+          <h1 style="font-family:var(--syne);font-size:20px;font-weight:800;color:var(--text);letter-spacing:-0.5px;line-height:1.3;margin-bottom:8px" id="task-title" contenteditable="true" onblur="saveField('title',this.textContent)">{{ task.title }}</h1>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span class="badge badge-{{ task.priority }}">{{ task.get_priority_display }}</span>
+            <span class="badge badge-{{ task.status }}">{{ task.get_status_display }}</span>
+            {% for tag in task.tag_list %}<span style="font-size:10px;background:{{ task.project.color }}15;color:{{ task.project.color }};padding:2px 7px;border-radius:10px;font-weight:600">{{ tag }}</span>{% endfor %}
+          </div>
+        </div>
+      </div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7" id="task-desc" contenteditable="true" onblur="saveField('description',this.textContent)" style="outline:none">
+        {% if task.description %}{{ task.description }}{% else %}<span style="color:var(--text3)">Clique para adicionar uma descrição...</span>{% endif %}
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">Progresso</div>
+        <div style="font-family:var(--syne);font-size:18px;font-weight:800;color:var(--accent)" id="progress-label">{{ task.progress }}%</div>
+      </div>
+      <div class="progress" style="height:8px">
+        <div class="progress-fill" id="progress-bar" style="width:{{ task.progress }}%;background:{{ task.project.color }}"></div>
+      </div>
+      <input type="range" min="0" max="100" value="{{ task.progress }}" style="width:100%;margin-top:10px;accent-color:{{ task.project.color }}" oninput="updateProgress(this.value)">
+    </div>
+
+    <!-- Subtasks -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px">
+        Subtarefas
+        <span style="color:var(--text3);font-weight:400;margin-left:4px">{{ task.done_subtasks_count }}/{{ task.subtasks.count }}</span>
+      </div>
+      <div id="subtasks-list">
+        {% for st in task.subtasks.all %}
+        <div class="subtask-item" id="st-{{ st.id }}" onclick="toggleSubtask('{{ st.id }}')">
+          <div class="check-box {% if st.done %}done{% endif %}" id="check-{{ st.id }}">{% if st.done %}✓{% endif %}</div>
+          <div class="subtask-text {% if st.done %}done{% endif %}" id="sttext-{{ st.id }}">{{ st.title }}</div>
+        </div>
+        {% empty %}
+        <p style="font-size:12px;color:var(--text3)">Nenhuma subtarefa. Adicione no formulário de edição.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+
+    <!-- Anexos -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:700;color:var(--text)">
+          Anexos
+          <span style="color:var(--text3);font-weight:400;margin-left:4px">{{ task.attachments.count }}</span>
+        </div>
+        <label style="cursor:pointer" class="btn btn-ghost btn-sm">
+          📎 Adicionar
+          <input type="file" id="file-upload" style="display:none" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" onchange="uploadFiles(this)">
+        </label>
+      </div>
+      <div id="attachments-list">
+        {% for att in task.attachments.all %}
+          {% if att.is_image %}
+          <a href="{% url 'api:download_attachment' attachment_id=att.pk %}" target="_blank">
+            <img src="{% url 'api:download_attachment' attachment_id=att.pk %}" alt="{{ att.filename }}" class="attach-img">
+          </a>
+          {% else %}
+          <div class="attach-item">
+            <span class="attach-icon">📄</span>
+            <div style="flex:1">
+              <div class="attach-name">{{ att.filename }}</div>
+              <div class="attach-meta">{{ att.uploaded_by }} · {{ att.created_at|date:"d/m H:i" }}</div>
+            </div>
+            <a href="{% url 'api:download_attachment' attachment_id=att.pk %}" target="_blank" class="btn btn-ghost btn-sm">↓</a>
+          </div>
+          {% endif %}
+        {% empty %}
+        <p style="font-size:12px;color:var(--text3)" id="no-attach-msg">Nenhum arquivo anexado.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Comments -->
+    <div class="card">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:14px">Comentários</div>
+      <div id="comments-list">
+        {% for c in task.comments.all %}
+        <div class="comment">
+          <div class="avatar" style="background:{{ c.author.avatar_color|default:'#888' }};font-size:10px;flex-shrink:0;margin-top:2px">{{ c.author.initials|default:"?" }}</div>
+          <div class="comment-body">
+            <div class="comment-meta">{{ c.author }} · {{ c.created_at|date:"d/m/Y H:i" }}</div>
+            <div class="comment-text">{{ c.content }}</div>
+          </div>
+        </div>
+        {% empty %}
+        <p style="font-size:12px;color:var(--text3);margin-bottom:14px">Nenhum comentário ainda.</p>
+        {% endfor %}
+      </div>
+      <form id="comment-form" style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        {% csrf_token %}
+        <div class="avatar" style="background:{{ request.user.avatar_color }};font-size:10px;flex-shrink:0;margin-top:4px">{{ request.user.initials }}</div>
+        <div style="flex:1">
+          <textarea name="content" class="form-control" rows="2" placeholder="Adicionar comentário..." style="resize:none"></textarea>
+          <button type="submit" class="btn btn-primary btn-sm" style="margin-top:6px">Comentar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Sidebar info -->
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div class="card">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px">Detalhes</div>
+      <table style="width:100%;font-size:12px">
+        <tr>
+          <td style="color:var(--text3);padding:5px 0;width:100px">Projeto</td>
+          <td><a href="{% url 'projects:kanban' pk=task.project.pk %}" style="display:flex;align-items:center;gap:5px">
+            <span style="width:7px;height:7px;border-radius:50%;background:{{ task.project.color }}"></span>
+            {{ task.project.name }}
+          </a></td>
+        </tr>
+        <tr>
+          <td style="color:var(--text3);padding:5px 0">Status</td>
+          <td>
+            <select onchange="saveField('status',this.value)" class="form-control" style="padding:3px 6px;font-size:11px">
+              {% for val, label in task.STATUS_CHOICES %}
+              <option value="{{ val }}" {% if task.status == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--text3);padding:5px 0">Prioridade</td>
+          <td>
+            <select onchange="saveField('priority',this.value)" class="form-control" style="padding:3px 6px;font-size:11px">
+              {% for val, label in task.PRIORITY_CHOICES %}
+              <option value="{{ val }}" {% if task.priority == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--text3);padding:5px 0">Início</td>
+          <td><input type="date" id="field-start-date" value="{{ task.start_date|date:'Y-m-d'|default:'' }}" class="form-control" style="padding:3px 6px;font-size:11px" onchange="saveField('start_date',this.value);autoFillDueDate()"></td>
+        </tr>
+        <tr>
+          <td style="color:var(--text3);padding:5px 0">Duração</td>
+          <td><input type="number" id="field-duration" min="1" value="{{ task.duration_days|default:'' }}" class="form-control" style="padding:3px 6px;font-size:11px;width:80px" placeholder="dias" onchange="saveField('duration_days', this.value ? parseInt(this.value) : null);autoFillDueDate()"></td>
+        </tr>
+        <tr>
+          <td style="color:var(--text3);padding:5px 0">Prazo</td>
+          <td><input type="date" id="field-due-date" value="{{ task.due_date|date:'Y-m-d'|default:'' }}" class="form-control" style="padding:3px 6px;font-size:11px" onchange="saveField('due_date',this.value)"></td>
+        </tr>
+        <tr>
+          <td style="color:var(--text3);padding:5px 0;vertical-align:middle">Sábado</td>
+          <td>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px">
+              <input type="checkbox" id="ck-saturday" {% if task.work_saturday %}checked{% endif %}
+                     onchange="saveField('work_saturday', this.checked)"
+                     style="accent-color:var(--accent)">
+              <span id="sat-label">{% if task.work_saturday %}Trabalha{% else %}Não trabalha{% endif %}</span>
+            </label>
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--text3);padding:5px 0;vertical-align:middle">Domingo</td>
+          <td>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px">
+              <input type="checkbox" id="ck-sunday" {% if task.work_sunday %}checked{% endif %}
+                     onchange="saveField('work_sunday', this.checked)"
+                     style="accent-color:var(--accent)">
+              <span id="sun-label">{% if task.work_sunday %}Trabalha{% else %}Não trabalha{% endif %}</span>
+            </label>
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--text3);padding:5px 0">Criado</td>
+          <td style="color:var(--text2)">{{ task.created_at|date:"d/m/Y" }}</td>
+        </tr>
+        {% if task.completed_at %}
+        <tr>
+          <td style="color:var(--text3);padding:5px 0">Concluído</td>
+          <td style="color:#059669">{{ task.completed_at|date:"d/m/Y" }}</td>
+        </tr>
+        {% endif %}
+      </table>
+    </div>
+
+    {% if task.start_date and task.duration_days %}
+    <a href="/tasks/{{ task.pk }}/daily-report/" class="btn btn-ghost" style="display:flex;align-items:center;gap:7px;justify-content:center">
+      📋 Relatório Diário
+      {% with acc=task.daily_reports.count %}
+      {% if acc %}<span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:10px">{{ acc }}/{{ task.duration_days }}</span>{% endif %}
+      {% endwith %}
+    </a>
+    {% else %}
+    <div style="font-size:11px;color:var(--text3);background:var(--surface2);border-radius:var(--radius);padding:10px 12px;text-align:center">
+      📋 Configure <strong>Início</strong> e <strong>Duração</strong> para ativar o Relatório Diário
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Responsáveis</div>
+        <button onclick="toggleAssigneeEdit()" id="assignee-edit-btn" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px">✏ Editar</button>
+      </div>
+      <div id="assignee-list">
+        {% for a in task.assignees.all %}
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0">
+          <div class="avatar" style="background:{{ a.avatar_color }}">{{ a.initials }}</div>
+          <div>
+            <div style="font-size:12px;font-weight:500">{{ a }}</div>
+            <div style="font-size:10px;color:var(--text3)">{{ a.job_title|default:a.get_role_display }}</div>
+          </div>
+        </div>
+        {% empty %}
+        <p style="font-size:12px;color:var(--text3)" id="no-assignee-msg">Nenhum responsável.</p>
+        {% endfor %}
+      </div>
+      <div id="assignee-edit-panel" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+        <select id="assignee-select" multiple class="form-control" style="font-size:12px" size="5">
+          {% for u in all_users %}
+          <option value="{{ u.id }}"
+            {% if u in task.assignees.all %}selected{% endif %}>
+            {{ u.get_full_name|default:u.username }}
+          </option>
+          {% endfor %}
+        </select>
+        <div style="font-size:10px;color:var(--text3);margin:5px 0 8px">Segure Ctrl/Cmd para selecionar múltiplos</div>
+        <div style="display:flex;gap:6px">
+          <button onclick="saveAssignees()" class="btn btn-primary btn-sm" style="flex:1">Salvar</button>
+          <button onclick="toggleAssigneeEdit()" class="btn btn-ghost btn-sm">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dependências -->
+    <div class="card" id="dep-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Dependências</div>
+        {% if can_create %}
+        <button onclick="toggleDepAdd()" id="dep-add-btn" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px">+ Adicionar</button>
+        {% endif %}
+      </div>
+
+      <!-- Bloqueadores desta tarefa -->
+      <div id="dep-blockers-section">
+        {% if blockers %}
+        <div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em">Aguardando:</div>
+        {% for dep in blockers %}
+        <div class="dep-item {% if dep.requires.status == 'done' %}dep-done{% endif %}" id="dep-{{ dep.id }}">
+          <div class="dep-dot"></div>
+          <a href="/tasks/{{ dep.requires.pk }}/" class="dep-title" title="{{ dep.requires.title }}">{{ dep.requires.title|truncatechars:35 }}</a>
+          {% if can_create %}
+          <button class="dep-rm" onclick="removeDep('{{ dep.id }}')" title="Remover">✕</button>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <p id="no-blockers-msg" style="font-size:12px;color:var(--text3);margin-bottom:6px">Sem dependências.</p>
+        {% endif %}
+      </div>
+
+      <!-- Tarefas que esta bloqueia -->
+      {% if blocking %}
+      <div style="font-size:10px;font-weight:600;color:var(--text3);margin:8px 0 5px;text-transform:uppercase;letter-spacing:.05em">Bloqueia:</div>
+      {% for dep in blocking %}
+      <div class="dep-item" style="opacity:0.65">
+        <div class="dep-dot" style="background:#64748b"></div>
+        <a href="/tasks/{{ dep.task.pk }}/" class="dep-title" title="{{ dep.task.title }}">{{ dep.task.title|truncatechars:35 }}</a>
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      <!-- Formulário para adicionar -->
+      {% if can_create %}
+      <div id="dep-add-form" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+        <select id="dep-task-select" class="form-control" style="font-size:12px;margin-bottom:8px">
+          <option value="">— Selecione a tarefa bloqueadora —</option>
+          {% for pt in proj_tasks %}
+          <option value="{{ pt.id }}">{{ pt.title|truncatechars:48 }} ({{ pt.get_status_display }})</option>
+          {% endfor %}
+        </select>
+        <div style="display:flex;gap:6px">
+          <button onclick="addDep()" class="btn btn-primary btn-sm" style="flex:1">Adicionar</button>
+          <button onclick="toggleDepAdd()" class="btn btn-ghost btn-sm">Cancelar</button>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const TASK_PK = "{{ task.pk }}";
+const CSRF    = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+// Escapa HTML antes de qualquer inserção via innerHTML com conteúdo do usuário
+// (comentários, menções) — evita XSS armazenado/refletido.
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+async function saveField(field, value) {
+  const body = {}; body[field] = value;
+  await fetch(`/tasks/${TASK_PK}/update/`, {
+    method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body: JSON.stringify(body)
+  });
+  // Atualiza label dos checkboxes de fim de semana
+  if (field === 'work_saturday') {
+    document.getElementById('sat-label').textContent = value ? 'Trabalha' : 'Não trabalha';
+  }
+  if (field === 'work_sunday') {
+    document.getElementById('sun-label').textContent = value ? 'Trabalha' : 'Não trabalha';
+  }
+}
+
+function autoFillDueDate() {
+  const startVal    = document.getElementById('field-start-date').value;
+  const durationVal = document.getElementById('field-duration').value;
+  if (!startVal || !durationVal || parseInt(durationVal) < 1) return;
+
+  const workSat = document.getElementById('ck-saturday')?.checked || false;
+  const workSun = document.getElementById('ck-sunday')?.checked   || false;
+
+  // Avança pelos dias contando apenas os dias úteis da tarefa
+  const [y, m, d] = startVal.split('-').map(Number);
+  let cur = new Date(y, m - 1, d);
+  let counted = 1; // o dia inicial já conta como dia 1
+  const total = parseInt(durationVal);
+
+  while (counted < total) {
+    cur.setDate(cur.getDate() + 1);
+    const dow = cur.getDay(); // 0=dom, 6=sab
+    if (dow === 6 && !workSat) continue;
+    if (dow === 0 && !workSun) continue;
+    counted++;
+  }
+
+  const due = cur.getFullYear() + '-'
+    + String(cur.getMonth() + 1).padStart(2, '0') + '-'
+    + String(cur.getDate()).padStart(2, '0');
+
+  const dueInput = document.getElementById('field-due-date');
+  dueInput.value = due;
+  saveField('due_date', due);
+}
+
+/* ── Check-in diário ─────────────────────────────────────────────────────── */
+const CHECKIN_DAY = {{ today_day_num|default:"null" }};
+
+async function saveCheckin(accomplished) {
+  if (!accomplished) {
+    document.getElementById('checkin-btns').style.display = 'none';
+    document.getElementById('checkin-reason-wrap').style.display = 'block';
+    document.getElementById('checkin-reason').focus();
+    return;
+  }
+  await _doCheckin(accomplished, '');
+}
+
+async function confirmCheckinNo() {
+  const notes = document.getElementById('checkin-reason').value.trim();
+  await _doCheckin(false, notes);
+}
+
+async function _doCheckin(accomplished, notes) {
+  try {
+    const r = await fetch(`/tasks/${TASK_PK}/daily-report/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ day: CHECKIN_DAY, accomplished, notes }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      const interactive = document.getElementById('checkin-interactive');
+      const label = accomplished
+        ? `<span style="background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3);border-radius:20px;padding:4px 12px;color:#059669;font-weight:700">✓ Sim, vou executar hoje</span>`
+        : `<span style="background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.2);border-radius:20px;padding:4px 12px;color:#dc2626;font-weight:700">✗ Não é possível hoje${notes ? ': ' + notes : ''}</span>`;
+      interactive.innerHTML =
+        `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${label}<button onclick="resetCheckin()" style="background:none;border:none;font-size:11px;color:var(--text3);cursor:pointer">Alterar</button></div>`;
+    }
+  } catch {}
+}
+
+function resetCheckin() {
+  const interactive = document.getElementById('checkin-interactive');
+  if (!interactive) { location.reload(); return; }
+  interactive.innerHTML = `
+    <div id="checkin-btns" style="display:flex;gap:8px">
+      <button onclick="saveCheckin(true)" class="btn btn-sm" style="flex:1;background:rgba(52,211,153,.1);color:#059669;border:1px solid rgba(52,211,153,.3);font-weight:700">✓ Sim, consigo</button>
+      <button onclick="saveCheckin(false)" class="btn btn-sm" style="flex:1;background:rgba(220,38,38,.07);color:#dc2626;border:1px solid rgba(220,38,38,.2);font-weight:700">✗ Não é possível</button>
+    </div>
+    <div id="checkin-reason-wrap" style="display:none;margin-top:10px">
+      <input id="checkin-reason" type="text" placeholder="Motivo (ex: chuva, falta de material...)"
+        style="width:100%;border:1px solid var(--border2);border-radius:8px;padding:9px 12px;font-size:13px;background:var(--surface2);color:var(--text);outline:none;box-sizing:border-box">
+      <button onclick="confirmCheckinNo()" class="btn btn-sm" style="margin-top:8px;width:100%;background:#dc2626;color:#fff;border-color:#dc2626;font-weight:700">Confirmar</button>
+    </div>`;
+}
+
+async function advanceTask() {
+  const btn = document.getElementById('action-btn');
+  if (!btn) return;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Aguarde...';
+
+  const r = await fetch(`/tasks/${TASK_PK}/advance/`, {method:'POST', headers:{'X-CSRFToken':CSRF}});
+  const d = await r.json();
+  if (!d.ok) {
+    alert(d.error || 'Erro ao avançar tarefa.');
+    btn.disabled = false;
+    btn.textContent = originalText;
+    return;
+  }
+  location.reload();
+}
+
+function updateProgress(val) {
+  document.getElementById('progress-label').textContent = val + '%';
+  document.getElementById('progress-bar').style.width = val + '%';
+  saveField('progress', parseInt(val));
+}
+
+async function toggleSubtask(stId) {
+  const r = await fetch(`/tasks/subtask/${stId}/toggle/`, {method:'POST',headers:{'X-CSRFToken':CSRF}});
+  const d = await r.json();
+  if (d.ok) {
+    const box  = document.getElementById('check-' + stId);
+    const text = document.getElementById('sttext-' + stId);
+    box.classList.toggle('done', d.done);
+    box.textContent = d.done ? '✓' : '';
+    text.classList.toggle('done', d.done);
+    document.getElementById('progress-label').textContent = d.progress + '%';
+    document.getElementById('progress-bar').style.width = d.progress + '%';
+  }
+}
+
+
+function openReportIssue() {
+  document.getElementById('report-modal').classList.add('open');
+}
+function closeReportIssue() {
+  document.getElementById('report-modal').classList.remove('open');
+  document.getElementById('issue-description').value = '';
+  document.getElementById('issue-reason').value = 'obstacle';
+}
+
+async function submitIssue() {
+  const desc   = document.getElementById('issue-description').value.trim();
+  const reason = document.getElementById('issue-reason').value;
+  if (!desc) { alert('Descreva o problema.'); return; }
+  const fd = new FormData();
+  fd.append('description', desc);
+  fd.append('reason', reason);
+  const r = await fetch(`/tasks/${TASK_PK}/report-issue/`, { method:'POST', body:fd, headers:{'X-CSRFToken':CSRF} });
+  const d = await r.json();
+  if (d.ok) {
+    closeReportIssue();
+    location.reload();
+  } else {
+    alert(d.error || 'Erro ao reportar problema.');
+  }
+}
+
+async function resolveIssue(issueId) {
+  const response = document.getElementById('issue-response')?.value.trim();
+  if (!response) { alert('Informe uma resposta.'); return; }
+  const supportTitle    = document.getElementById('support-title')?.value.trim() || '';
+  const supportAssignee = document.getElementById('support-assignee')?.value || '';
+  const r = await fetch(`/tasks/issue/${issueId}/resolve/`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body: JSON.stringify({ response: response, support_title: supportTitle, support_assignee: supportAssignee }),
+  });
+  const d = await r.json();
+  if (d.ok) {
+    location.reload();
+  } else {
+    alert(d.error || 'Erro ao resolver.');
+  }
+}
+
+async function uploadFiles(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  const list = document.getElementById('attachments-list');
+  const noMsg = document.getElementById('no-attach-msg');
+  if (noMsg) noMsg.remove();
+
+  for (const file of files) {
+    if (file.size > 10 * 1024 * 1024) { alert(`${file.name} excede 10MB.`); continue; }
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch(`/tasks/${TASK_PK}/upload/`, { method:'POST', body:fd, headers:{'X-CSRFToken':CSRF} });
+    const d = await r.json();
+    if (d.ok) {
+      if (d.is_image) {
+        list.insertAdjacentHTML('afterbegin', `<a href="${d.url}" target="_blank"><img src="${d.url}" alt="${escapeHtml(d.filename)}" class="attach-img"></a>`);
+      } else {
+        list.insertAdjacentHTML('afterbegin', `<div class="attach-item"><span class="attach-icon">📄</span><div style="flex:1"><div class="attach-name">${escapeHtml(d.filename)}</div><div class="attach-meta">${escapeHtml(d.uploaded_by)} · agora</div></div><a href="${d.url}" target="_blank" class="btn btn-ghost btn-sm">↓</a></div>`);
+      }
+    }
+  }
+  input.value = '';
+}
+
+function toggleAssigneeEdit() {
+  const panel = document.getElementById('assignee-edit-panel');
+  const open  = panel.style.display === 'none';
+  panel.style.display = open ? 'block' : 'none';
+  document.getElementById('assignee-edit-btn').textContent = open ? '✕ Fechar' : '✏ Editar';
+}
+
+async function saveAssignees() {
+  const ids = Array.from(document.getElementById('assignee-select').selectedOptions).map(o => o.value);
+  const r = await fetch(`/tasks/${TASK_PK}/update/`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body: JSON.stringify({assignees: ids})
+  });
+  const d = await r.json();
+  if (d.ok) {
+    location.reload();
+  } else {
+    alert(d.error || 'Erro ao salvar responsáveis.');
+  }
+}
+
+async function deleteTask() {
+  if (!confirm('Excluir esta tarefa?')) return;
+  const r = await fetch(`/tasks/${TASK_PK}/delete/`, {method:'POST',headers:{'X-CSRFToken':CSRF}});
+  const d = await r.json();
+  if (d.ok) window.location.href = d.redirect;
+}
+
+/* ── Conversa da Issue (@menções) ─────────────────────────────── */
+const IC_MEMBERS = [
+  {% for m in proj_members %}
+  { name: "{{ m.get_full_name|default:m.username }}", username: "{{ m.username }}", first: "{{ m.first_name }}", initials: "{{ m.initials }}", color: "{{ m.avatar_color }}" },
+  {% endfor %}
+];
+
+let icMentionQuery = null;
+let icMentionStart = -1;
+let icSelectedIdx  = 0;
+
+function icHandleInput(ta) {
+  const val = ta.value, pos = ta.selectionStart;
+  // Detecta se estamos digitando @xxx
+  const before = val.slice(0, pos);
+  const m = before.match(/@(\w*)$/);
+  if (m) {
+    icMentionQuery = m[1].toLowerCase();
+    icMentionStart = pos - m[0].length;
+    icShowDropdown(icMentionQuery);
+  } else {
+    icMentionQuery = null;
+    icHideDropdown();
+  }
+}
+
+function icHandleKey(e) {
+  const list = document.getElementById('ic-mention-list');
+  if (list.style.display === 'none') return;
+  const items = list.querySelectorAll('.ic-mention-item');
+  if (e.key === 'ArrowDown') { e.preventDefault(); icSelectedIdx = Math.min(icSelectedIdx+1, items.length-1); icHighlight(items); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); icSelectedIdx = Math.max(icSelectedIdx-1, 0); icHighlight(items); }
+  else if (e.key === 'Enter' && icMentionQuery !== null) { e.preventDefault(); if(items[icSelectedIdx]) items[icSelectedIdx].click(); }
+  else if (e.key === 'Escape') icHideDropdown();
+}
+
+function icHighlight(items) {
+  items.forEach((it, i) => it.style.background = i === icSelectedIdx ? 'var(--surface2)' : '');
+}
+
+function icShowDropdown(query) {
+  const list = document.getElementById('ic-mention-list');
+  const filtered = IC_MEMBERS.filter(m =>
+    m.first.toLowerCase().startsWith(query) ||
+    m.username.toLowerCase().startsWith(query) ||
+    m.name.toLowerCase().startsWith(query)
+  );
+  if (!filtered.length) { icHideDropdown(); return; }
+  list.innerHTML = filtered.map((m, i) => `
+    <div class="ic-mention-item" onclick="icPickMention('${m.first || m.username}')">
+      <div style="width:22px;height:22px;border-radius:50%;background:${m.color};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff;flex-shrink:0">${m.initials}</div>
+      <span>${m.name}</span>
+    </div>`).join('');
+  icSelectedIdx = 0;
+  list.style.display = 'block';
+}
+
+function icHideDropdown() {
+  document.getElementById('ic-mention-list').style.display = 'none';
+}
+
+function icPickMention(firstName) {
+  const ta = document.getElementById('ic-input');
+  const val = ta.value;
+  const before = val.slice(0, icMentionStart);
+  const after  = val.slice(ta.selectionStart);
+  ta.value = before + '@' + firstName + ' ' + after;
+  ta.selectionStart = ta.selectionEnd = (before + '@' + firstName + ' ').length;
+  icHideDropdown();
+  icMentionQuery = null;
+  ta.focus();
+}
+
+function icStartEdit(commentId, btn) {
+  const textEl = document.getElementById(`ic-text-${commentId}`);
+  if (!textEl) return;
+  // Evitar dupla abertura
+  if (textEl.querySelector('.ic-edit-area')) return;
+  const rawText = textEl.innerText.trim();
+  textEl.innerHTML = `
+    <textarea class="ic-edit-area" id="ic-edit-ta-${commentId}" rows="3">${rawText}</textarea>
+    <div class="ic-edit-actions">
+      <button class="btn btn-primary btn-sm" onclick="icSaveEdit('${commentId}')">Salvar</button>
+      <button class="btn btn-ghost btn-sm" onclick="icCancelEdit('${commentId}', ${JSON.stringify(rawText)})">Cancelar</button>
+    </div>`;
+  btn.style.display = 'none';
+  document.getElementById(`ic-edit-ta-${commentId}`).focus();
+}
+
+async function icSaveEdit(commentId) {
+  const ta = document.getElementById(`ic-edit-ta-${commentId}`);
+  const content = ta ? ta.value.trim() : '';
+  if (!content) return;
+  const saveBtn = ta.closest('.ic-text').querySelector('.btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '…'; }
+
+  const r = await fetch(`/api/tasks/issue/comment/${commentId}/edit/`, {
+    method: 'POST',
+    headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  const d = await r.json();
+  if (d.ok) {
+    const textEl = document.getElementById(`ic-text-${commentId}`);
+    textEl.innerHTML = d.content_html;
+    // Reativa o botão de editar
+    const editBtn = textEl.closest('.ic-bubble').querySelector('.ic-edit-btn');
+    if (editBtn) editBtn.style.display = '';
+  } else {
+    alert(d.error || 'Erro ao salvar.');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Salvar'; }
+  }
+}
+
+function icCancelEdit(commentId, originalText) {
+  const textEl = document.getElementById(`ic-text-${commentId}`);
+  if (!textEl) return;
+  const highlighted = escapeHtml(originalText).replace(/@(\w+)/g, '<span class="mention">@$1</span>');
+  textEl.innerHTML = highlighted;
+  const editBtn = textEl.closest('.ic-bubble').querySelector('.ic-edit-btn');
+  if (editBtn) editBtn.style.display = '';
+}
+
+async function icSend(issueId) {
+  const ta = document.getElementById('ic-input');
+  const content = ta.value.trim();
+  if (!content) return;
+  const btn = document.querySelector('[onclick*="icSend"]');
+  btn.disabled = true;
+
+  const fd = new FormData();
+  fd.append('content', content);
+  const r = await fetch(`/tasks/issue/${issueId}/comment/`, { method:'POST', body:fd, headers:{'X-CSRFToken':CSRF} });
+  const d = await r.json();
+  if (d.ok) {
+    ta.value = '';
+    // Renderiza @menções com destaque (conteúdo escapado antes de virar HTML)
+    const highlighted = escapeHtml(d.content).replace(/@(\w+)/g, '<span class="mention">@$1</span>');
+    const thread = document.getElementById('ic-thread');
+    thread.insertAdjacentHTML('beforeend', `
+      <div class="ic-msg" id="ic-msg-${d.id}">
+        <div class="avatar" style="background:${d.color};font-size:9px;flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700">${escapeHtml(d.initials)}</div>
+        <div class="ic-bubble">
+          <div class="ic-meta">
+            <span>${escapeHtml(d.author)} · ${escapeHtml(d.created_at)}</span>
+            <button class="ic-edit-btn" onclick="icStartEdit('${d.id}', this)" title="Editar">✏</button>
+          </div>
+          <div class="ic-text" id="ic-text-${d.id}">${highlighted}</div>
+        </div>
+      </div>`);
+    thread.scrollTop = thread.scrollHeight;
+  } else {
+    alert(d.error || 'Erro ao enviar.');
+  }
+  btn.disabled = false;
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.ic-form')) icHideDropdown();
+});
+
+/* ── Dependências ──────────────────────────────────────────── */
+function toggleDepAdd() {
+  const form = document.getElementById('dep-add-form');
+  const btn  = document.getElementById('dep-add-btn');
+  const open = form.style.display === 'none';
+  form.style.display = open ? 'block' : 'none';
+  if (btn) btn.textContent = open ? '✕ Fechar' : '+ Adicionar';
+}
+
+async function addDep() {
+  const sel = document.getElementById('dep-task-select');
+  const requiresId = sel.value;
+  if (!requiresId) { alert('Selecione uma tarefa.'); return; }
+
+  const r = await fetch(`/tasks/${TASK_PK}/dependencies/add/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ requires: requiresId }),
+  });
+  const d = await r.json();
+  if (d.ok) {
+    const noMsg = document.getElementById('no-blockers-msg');
+    if (noMsg) noMsg.remove();
+    const section = document.getElementById('dep-blockers-section');
+    const isDone  = d.requires_status === 'done';
+    // Garante o cabeçalho "Aguardando:" se for a primeira entrada
+    if (!section.querySelector('.dep-section-header')) {
+      section.insertAdjacentHTML('afterbegin', '<div class="dep-section-header" style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em">Aguardando:</div>');
+    }
+    section.insertAdjacentHTML('beforeend', `
+      <div class="dep-item ${isDone ? 'dep-done' : ''}" id="dep-${d.dep_id}">
+        <div class="dep-dot"></div>
+        <a href="/tasks/${d.requires_id}/" class="dep-title" title="${d.requires_title}">${d.requires_title.slice(0,35)}</a>
+        <button class="dep-rm" onclick="removeDep('${d.dep_id}')" title="Remover">✕</button>
+      </div>`);
+    sel.value = '';
+    toggleDepAdd();
+  } else {
+    alert(d.error || 'Erro ao adicionar dependência.');
+  }
+}
+
+async function removeDep(depId) {
+  if (!confirm('Remover esta dependência?')) return;
+  const r = await fetch(`/tasks/${TASK_PK}/dependencies/${depId}/remove/`, {
+    method: 'POST', headers: { 'X-CSRFToken': CSRF },
+  });
+  const d = await r.json();
+  if (d.ok) {
+    const el = document.getElementById(`dep-${depId}`);
+    if (el) el.remove();
+    const section = document.getElementById('dep-blockers-section');
+    if (!section.querySelector('.dep-item')) {
+      section.querySelector('.dep-section-header')?.remove();
+      section.insertAdjacentHTML('afterbegin', '<p id="no-blockers-msg" style="font-size:12px;color:var(--text3);margin-bottom:6px">Sem dependências.</p>');
+    }
+  } else {
+    alert(d.error || 'Erro ao remover.');
+  }
+}
+
+document.getElementById('comment-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const r  = await fetch(`/tasks/${TASK_PK}/comment/`, {method:'POST',body:fd,headers:{'X-CSRFToken':CSRF}});
+  const d  = await r.json();
+  if (d.ok) {
+    const el = document.createElement('div');
+    el.className = 'comment';
+    el.innerHTML = `<div class="avatar" style="background:${d.color};font-size:10px;flex-shrink:0;margin-top:2px">${escapeHtml(d.initials)}</div><div class="comment-body"><div class="comment-meta">${escapeHtml(d.author)} · ${escapeHtml(d.created_at)}</div><div class="comment-text">${escapeHtml(d.content)}</div></div>`;
+    document.getElementById('comments-list').appendChild(el);
+    e.target.reset();
+  }
+});
+</script>
+{% endblock %}

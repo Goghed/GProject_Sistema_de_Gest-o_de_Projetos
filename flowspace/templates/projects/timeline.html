@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+{% block title %}Timeline — {{ project.name }}{% endblock %}
+
+{% block topbar_left %}
+<div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:2px">
+    <a href="{% url 'projects:dashboard' %}" style="color:var(--text3)">Projetos</a> /
+    <a href="{% url 'projects:kanban' pk=project.pk %}" style="color:var(--text3)">{{ project.name }}</a>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div style="width:10px;height:10px;border-radius:50%;background:{{ project.color }}"></div>
+    <div class="topbar-title">{{ project.name }}</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block topbar_actions %}
+<div class="view-pills">
+  <a href="{% url 'projects:kanban' pk=project.pk %}" class="vpill">⊞ Kanban</a>
+  <a href="{% url 'projects:timeline' pk=project.pk %}" class="vpill active">◷ Timeline</a>
+  <a href="{% url 'projects:task_list' pk=project.pk %}" class="vpill">≡ Lista</a>
+</div>
+<div style="display:flex;align-items:center;gap:3px;padding:0 4px">
+  {% for member in project.members.all %}
+  <div style="position:relative" title="{{ member.get_full_name|default:member.username }}">
+    <div style="width:28px;height:28px;border-radius:50%;background:{{ member.avatar_color }};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;border:2px solid var(--white);box-shadow:0 0 0 1.5px var(--border)">{{ member.initials }}</div>
+    <span class="presence-dot {% if member == request.user %}is-me{% endif %}" data-uid="{{ member.id }}"
+          style="position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;border:2px solid var(--white);background:rgba(119,119,170,.4);display:block"></span>
+  </div>
+  {% endfor %}
+</div>
+<a href="{% url 'projects:project_scope' project.id %}" class="btn-folder"> 📁 </a>
+<a href="{% url 'projects:settings' pk=project.pk %}" class="btn btn-ghost btn-sm">⚙</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Wrapper geral ─────────────────────────────────── */
+.tl-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* Legenda */
+.tl-legend {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.tl-leg-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text3); font-weight: 500; }
+.tl-leg-sq { width: 12px; height: 12px; border-radius: 3px; }
+
+/* ── Container Gantt: scroll horizontal completo ─── */
+.tl-scroll { overflow-x: auto; overflow-y: visible; }
+
+/* Tabela do gantt — colunas: [nome fixo] [dias...] */
+.tl-table {
+  display: grid;
+  /* coluna nome fixa + colunas de dias (definidas pelo JS) */
+  min-width: max-content;
+}
+
+/* Cabeçalho de mês */
+.tl-month-row {
+  display: contents;
+}
+.tl-month-cell {
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 4px 8px;
+  font-size: 10px; font-weight: 700;
+  color: var(--text3);
+  text-transform: uppercase; letter-spacing: .06em;
+  white-space: nowrap; overflow: hidden;
+}
+.tl-month-cell.name-col {
+  position: sticky; left: 0; z-index: 4;
+  background: var(--surface2);
+  min-width: 220px;
+}
+
+/* Cabeçalho de dias */
+.tl-day-row { display: contents; }
+.tl-day-cell {
+  background: var(--white);
+  border-bottom: 2px solid var(--border);
+  border-right: 1px solid transparent;
+  text-align: center;
+  font-size: 9px; font-weight: 600; color: var(--text3);
+  padding: 3px 0;
+  line-height: 1;
+}
+.tl-day-cell.today-col { background: rgba(91,76,245,.06); color: var(--accent); font-weight: 800; }
+.tl-day-cell.weekend   { color: var(--border2); }
+.tl-day-cell.name-col  {
+  position: sticky; left: 0; z-index: 4;
+  background: var(--white);
+  font-size: 10px; font-weight: 700; color: var(--text3);
+  text-align: left; padding: 3px 14px;
+  border-right: 1px solid var(--border);
+}
+
+/* Linhas de tarefa */
+.tl-task-row { display: contents; }
+.tl-name-cell {
+  position: sticky; left: 0; z-index: 3;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 14px;
+  height: 42px;
+  cursor: pointer;
+  transition: background .12s;
+  min-width: 220px;
+}
+.tl-name-cell:hover { background: var(--surface2); }
+
+.tl-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.tl-task-title { font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.tl-avs { display: flex; flex-shrink: 0; }
+.tl-av { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--white); margin-left: -4px; display: flex; align-items: center; justify-content: center; font-size: 7px; font-weight: 700; color: #fff; }
+
+/* Células do grid de quadradinhos */
+.tl-sq-cell {
+  border-bottom: 1px solid var(--border);
+  height: 42px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.tl-sq-cell.today-col { background: rgba(91,76,245,.04); }
+.tl-sq-cell.weekend   { background: var(--surface2); }
+
+/* O quadradinho */
+.tl-sq {
+  width: 14px; height: 14px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: transform .12s, box-shadow .12s;
+  position: relative;
+  z-index: 1;
+}
+.tl-sq:hover { transform: scale(1.5); z-index: 10; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+
+/* Tooltip */
+.tl-sq::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%; transform: translateX(-50%);
+  background: rgba(15,15,30,.9);
+  color: #fff;
+  font-size: 11px; font-weight: 500;
+  white-space: nowrap;
+  padding: 4px 10px; border-radius: 6px;
+  pointer-events: none;
+  opacity: 0; transition: opacity .15s;
+  z-index: 200;
+  font-family: var(--dm);
+}
+.tl-sq:hover::after { opacity: 1; }
+
+/* Linha do hoje */
+.tl-today-line {
+  position: absolute; top: 0; bottom: 0; left: 50%;
+  width: 2px; background: var(--accent); opacity: .4;
+  pointer-events: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% if tasks %}
+<div class="tl-card fade-up">
+
+  <!-- Legenda -->
+  <div class="tl-legend">
+    <div class="tl-leg-item">
+      <div class="tl-leg-sq" style="background:{{ project.color }}"></div>
+      Concluída
+    </div>
+    <div class="tl-leg-item">
+      <div class="tl-leg-sq" style="background:#fbbf24"></div>
+      Pausada / Bloqueada
+    </div>
+    <div class="tl-leg-item">
+      <div class="tl-leg-sq" style="background:#a855f7"></div>
+      Em revisão
+    </div>
+    <div class="tl-leg-item">
+      <div class="tl-leg-sq" style="background:#0ea5e9"></div>
+      Em progresso
+    </div>
+    <div class="tl-leg-item">
+      <div class="tl-leg-sq" style="background:var(--border2)"></div>
+      A fazer / Backlog
+    </div>
+    <div class="tl-leg-item" style="margin-left:auto">
+      <div style="width:3px;height:12px;border-radius:2px;background:var(--accent);opacity:.6"></div>
+      Hoje
+    </div>
+  </div>
+
+  <!-- Grid (montado pelo JS) -->
+  <div class="tl-scroll">
+    <div class="tl-table" id="tl-table">
+      <!-- O JS vai preencher aqui -->
+    </div>
+  </div>
+
+</div>
+{% else %}
+<div class="card fade-up" style="text-align:center;padding:60px 20px;color:var(--text3)">
+  <div style="font-size:32px;margin-bottom:10px">📅</div>
+  <div style="font-weight:600;font-size:15px;margin-bottom:6px">Nenhuma tarefa encontrada</div>
+  <div>Adicione tarefas ao projeto para visualizar a timeline.</div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const TASKS       = {{ tasks_json|safe }};
+const PROJ_COLOR  = "{{ project.color }}";
+const G_START_STR = "{{ gantt_start }}";
+const G_END_STR   = "{{ gantt_end }}";
+const TODAY_STR   = "{{ today|date:'Y-m-d' }}";
+
+// ── Utilitários ────────────────────────────────────────────────────────────────
+function parseDate(s) {
+  // "YYYY-MM-DD" → Date em UTC noon para evitar problemas de timezone
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12));
+}
+function toYMD(d) {
+  return d.toISOString().slice(0, 10);
+}
+function addDays(d, n) {
+  const r = new Date(d);
+  r.setUTCDate(r.getUTCDate() + n);
+  return r;
+}
+
+const MONTH_PT = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
+// ── Cor do quadradinho ─────────────────────────────────────────────────────────
+function sqColor(task, dayStr) {
+  if (dayStr < task.start || dayStr > task.end) return null; // fora da faixa
+  if (task.status === "done")        return PROJ_COLOR;
+  if (task.is_blocked)               return "#fbbf24";
+  if (task.status === "review")      return "#a855f7";
+  if (task.status === "in_progress") return "#0ea5e9";
+  return "var(--border2)";
+}
+
+// ── Constrói o grid ────────────────────────────────────────────────────────────
+function buildGantt() {
+  const table = document.getElementById("tl-table");
+  if (!table || !TASKS.length) return;
+
+  // Monta array de dias
+  const gStart = parseDate(G_START_STR);
+  const gEnd   = parseDate(G_END_STR);
+  const days   = [];
+  let cur = new Date(gStart);
+  while (toYMD(cur) <= G_END_STR) {
+    days.push(new Date(cur));
+    cur = addDays(cur, 1);
+  }
+
+  const NCOLS  = days.length;
+  const COL_W  = "18px";
+
+  // Define o grid: coluna nome + N colunas de dias
+  const colDefs = `220px ${days.map(() => COL_W).join(" ")}`;
+  table.style.gridTemplateColumns = colDefs;
+
+  // ── Linha de meses ─────────────────────────────────────────────────────────
+  // Célula vazia no canto superior esquerdo
+  const cornerCell = el("div", "tl-month-cell name-col", "Tarefa");
+  table.appendChild(cornerCell);
+
+  // Agrupa dias por mês
+  let prevM = -1, monthEl = null, spanCount = 0;
+  days.forEach((d, i) => {
+    const m = d.getUTCMonth();
+    if (m !== prevM) {
+      if (monthEl) monthEl.style.gridColumn = `span ${spanCount}`;
+      monthEl = el("div", "tl-month-cell", `${MONTH_PT[m]} ${d.getUTCFullYear()}`);
+      table.appendChild(monthEl);
+      prevM = m; spanCount = 0;
+    }
+    spanCount++;
+    if (i === days.length - 1) monthEl.style.gridColumn = `span ${spanCount}`;
+  });
+
+  // ── Linha de dias ──────────────────────────────────────────────────────────
+  const dayLabel = el("div", "tl-day-cell name-col", "");
+  table.appendChild(dayLabel);
+
+  days.forEach(d => {
+    const ymd = toYMD(d);
+    const dow = d.getUTCDay(); // 0=dom,6=sab
+    let cls = "tl-day-cell";
+    if (ymd === TODAY_STR) cls += " today-col";
+    else if (dow === 0 || dow === 6) cls += " weekend";
+    const txt = (dow === 1 || d.getUTCDate() === 1) ? d.getUTCDate() : "";
+    table.appendChild(el("div", cls, txt));
+  });
+
+  // ── Linhas de tarefa ───────────────────────────────────────────────────────
+  TASKS.forEach(task => {
+    // Coluna do nome (sticky)
+    const nameCell = el("div", "tl-name-cell");
+    nameCell.onclick = () => { window.location.href = task.url; };
+
+    // Dot de status
+    const dot = el("div", "tl-status-dot");
+    dot.style.background = sqColor(task, task.end) || "var(--border2)";
+    nameCell.appendChild(dot);
+
+    const titleEl = el("div", "tl-task-title", task.title);
+    titleEl.title = task.title;
+    nameCell.appendChild(titleEl);
+
+    // Avatares
+    if (task.assignees && task.assignees.length) {
+      const avWrap = el("div", "tl-avs");
+      task.assignees.forEach((ini, idx) => {
+        const av = el("div", "tl-av", ini);
+        av.style.background = task.av_colors[idx] || "#888";
+        avWrap.appendChild(av);
+      });
+      nameCell.appendChild(avWrap);
+    }
+    table.appendChild(nameCell);
+
+    // Células de dias
+    days.forEach(d => {
+      const ymd  = toYMD(d);
+      const dow  = d.getUTCDay();
+      let cls = "tl-sq-cell";
+      if (ymd === TODAY_STR) cls += " today-col";
+      else if (dow === 0 || dow === 6) cls += " weekend";
+
+      const cell = el("div", cls);
+
+      // Linha vertical "hoje"
+      if (ymd === TODAY_STR) {
+        const todayLine = el("div", "tl-today-line");
+        cell.appendChild(todayLine);
+      }
+
+      const color = sqColor(task, ymd);
+      if (color) {
+        const sq = el("div", "tl-sq");
+        sq.style.background = color;
+
+        // Cantos arredondados nas extremidades do bloco
+        const isFirst = ymd === task.start;
+        const isLast  = ymd === task.end;
+        if      (isFirst && isLast) sq.style.borderRadius = "4px";
+        else if (isFirst)           sq.style.borderRadius = "4px 2px 2px 4px";
+        else if (isLast)            sq.style.borderRadius = "2px 4px 4px 2px";
+        else                        sq.style.borderRadius = "2px";
+
+        // Tooltip
+        const dateLabel = d.toLocaleDateString("pt-BR", {day:"2-digit", month:"short"});
+        sq.setAttribute("data-tip", `${task.title} · ${dateLabel}`);
+        sq.onclick = (e) => { e.stopPropagation(); window.location.href = task.url; };
+        cell.appendChild(sq);
+      }
+
+      table.appendChild(cell);
+    });
+  });
+
+  // ── Rola até hoje ──────────────────────────────────────────────────────────
+  const todayIdx = days.findIndex(d => toYMD(d) === TODAY_STR);
+  if (todayIdx >= 0) {
+    const scroll = document.querySelector(".tl-scroll");
+    if (scroll) {
+      const cellW = 18;
+      // +220 pelo nome fixo, mas ele é sticky então não conta no scroll
+      const target = Math.max(0, todayIdx * cellW - scroll.clientWidth / 2 + 110);
+      scroll.scrollLeft = target;
+    }
+  }
+}
+
+// ── Helper para criar elementos ────────────────────────────────────────────────
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls)  e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+document.addEventListener("DOMContentLoaded", buildGantt);
+
+// ── Presence dots ──────────────────────────────────────────────────────────────
+(function() {
+  const MY_UID = '{{ request.user.id }}';
+  const HB_KEY = 'gp_hb_';
+  const HB_TTL = 35000;
+  function seen(uid) { try { return Date.now() - parseInt(localStorage.getItem(HB_KEY+uid)||0) < HB_TTL; } catch(_) { return false; } }
+  function refresh() {
+    document.querySelectorAll('.presence-dot[data-uid]').forEach(d => {
+      const on = d.dataset.uid === MY_UID || d.classList.contains('is-me') || seen(d.dataset.uid);
+      d.style.background = on ? '#34d399' : 'rgba(119,119,170,.4)';
+      d.style.animation  = on ? 'pls 2s infinite' : 'none';
+    });
+  }
+  refresh(); setInterval(refresh, 5000);
+  try { const bc = new BroadcastChannel('gp_presence'); bc.onmessage = e => { if (e.data&&e.data.uid) { try { localStorage.setItem(HB_KEY+e.data.uid,Date.now()); } catch(_){} refresh(); } }; } catch(_){}
+})();
+</script>
+{% endblock %}

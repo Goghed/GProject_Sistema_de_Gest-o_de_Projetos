@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}G Project{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:#0a0a0f; --ink2:#13131f; --ink3:#1e1e30;
+  --surface:#f7f6ff; --surface2:#eeeeff; --surface3:#e4e2ff;
+  --white:#ffffff;
+  --accent:#5b4cf5; --accent2:#7c6ffa; --accent3:#a89df7; --accent-glow:rgba(91,76,245,0.35);
+  --lime:#b8ff57; --coral:#ff6b6b; --sky:#38bdf8;
+  --amber:#fbbf24; --green:#34d399; --pink:#f472b6;
+  --text:#0a0a0f; --text2:#3a3a5c; --text3:#7777aa;
+  --border:rgba(91,76,245,0.10); --border2:rgba(91,76,245,0.20);
+  --syne:'Syne',sans-serif; --dm:'DM Sans',sans-serif;
+  --shadow:0 2px 16px rgba(91,76,245,0.08);
+  --shadow-md:0 6px 28px rgba(91,76,245,0.14);
+  --shadow-lg:0 16px 48px rgba(91,76,245,0.20);
+  --radius:10px; --radius-lg:16px; --radius-xl:22px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: var(--dm); background: var(--surface); color: var(--text); font-size: 14px; }
+a { color: var(--accent); text-decoration: none; }
+
+/* ── Shell ── */
+.shell { display: flex; height: 100vh; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 230px; flex-shrink: 0;
+  background: var(--ink);
+  display: flex; flex-direction: column;
+  position: relative; overflow: hidden;
+}
+.sidebar::after {
+  content: ''; position: absolute; bottom: -80px; right: -80px;
+  width: 200px; height: 200px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(91,76,245,0.25) 0%, transparent 70%);
+  pointer-events: none;
+}
+.sb-logo {
+  padding: 20px 18px 16px;
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.sb-mark {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--syne); font-size: 17px; font-weight: 800; color: #fff;
+  box-shadow: 0 0 24px var(--accent-glow);
+  flex-shrink: 0;
+}
+.sb-name { font-family: var(--syne); font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+.sb-tag  { font-size: 10px; color: rgba(255,255,255,0.3); margin-top: 1px; }
+.sb-section { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.25); letter-spacing: 0.1em; text-transform: uppercase; padding: 14px 18px 5px; }
+.sb-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 10px; margin: 1px 8px; border-radius: 8px;
+  font-size: 13px; color: rgba(255,255,255,0.5);
+  cursor: pointer; transition: all 0.15s; text-decoration: none;
+  position: relative;
+}
+.sb-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.88); text-decoration: none; }
+.sb-item.active { background: rgba(91,76,245,0.22); color: #fff; }
+.sb-item.active::before { content: ''; position: absolute; left: 0; top: 25%; bottom: 25%; width: 3px; background: var(--accent2); border-radius: 0 3px 3px 0; }
+.sb-ico { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; opacity: 0.75; }
+.sb-badge { margin-left: auto; background: var(--accent); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 10px; font-weight: 600; }
+.sb-projects { flex: 1; overflow-y: auto; padding: 4px 8px; }
+.sb-proj {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 7px; cursor: pointer;
+  transition: all 0.14s; text-decoration: none;
+}
+.sb-proj:hover { background: rgba(255,255,255,0.05); }
+.sb-proj-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sb-proj-name { font-size: 12px; color: rgba(255,255,255,0.45); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-proj-count { font-size: 10px; color: rgba(255,255,255,0.22); }
+.sb-user {
+  padding: 12px 14px; border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center; gap: 9px;
+}
+.sb-avatar {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #fff;
+  background: {{ request.user.avatar_color|default:"#5b4cf5" }};
+}
+.sb-uname { font-size: 12px; color: rgba(255,255,255,0.8); font-weight: 500; }
+.sb-urole { font-size: 10px; color: rgba(255,255,255,0.28); }
+.sb-logout { margin-left: auto; color: rgba(255,255,255,0.25); font-size: 12px; cursor: pointer; transition: color 0.15s; }
+.sb-logout:hover { color: var(--coral); }
+
+
+/* ── Dark Mode ── */
+body.dark-mode {
+  --surface:#0f0f18; --surface2:#1a1a2e; --surface3:#22223a;
+  --white:#13131f; --text:#e8e6ff; --text2:#a0a0cc; --text3:#6060aa;
+  --border:rgba(91,76,245,0.15); --border2:rgba(91,76,245,0.25);
+  --shadow:0 2px 16px rgba(0,0,0,0.3);
+  --shadow-md:0 6px 28px rgba(0,0,0,0.4);
+  --shadow-lg:0 16px 48px rgba(0,0,0,0.5);
+}
+body.dark-mode .card { background:var(--white); border-color:var(--border); }
+body.dark-mode .topbar { background:var(--white); border-color:var(--border); }
+body.dark-mode input, body.dark-mode select, body.dark-mode textarea { background:var(--surface2); color:var(--text); border-color:var(--border2); }
+body.dark-mode .table td, body.dark-mode .table th { border-color:var(--border); }
+body.dark-mode .form-control { background:var(--surface2); color:var(--text); border-color:var(--border2); }
+
+/* Toggle switch */
+.dark-toggle {
+  width:32px; height:18px; border-radius:9px; background:rgba(255,255,255,0.15);
+  position:relative; cursor:pointer; transition:background .2s; flex-shrink:0;
+  border:none; outline:none;
+}
+.dark-toggle.on { background:var(--accent); }
+.dark-toggle::after {
+  content:''; position:absolute; top:2px; left:2px;
+  width:14px; height:14px; border-radius:50%; background:#fff;
+  transition:transform .2s;
+}
+.dark-toggle.on::after { transform:translateX(14px); }
+
+/* ── Main ── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Topbar ── */
+.topbar {
+  padding: 0 24px; height: 56px; flex-shrink: 0;
+  background: var(--white); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px;
+}
+.topbar-crumb { font-size: 12px; color: var(--text3); }
+.topbar-crumb span { color: var(--text2); }
+.topbar-title { font-family: var(--syne); font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.4px; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* View switcher */
+.view-pills { display: flex; background: var(--surface2); padding: 3px; border-radius: 9px; gap: 2px; }
+.vpill { padding: 5px 13px; border-radius: 7px; font-size: 12px; font-weight: 500; color: var(--text3); cursor: pointer; transition: all 0.14s; text-decoration: none; display: flex; align-items: center; gap: 5px; }
+.vpill:hover { color: var(--text2); text-decoration: none; }
+.vpill.active { background: var(--white); color: var(--accent); box-shadow: 0 1px 5px rgba(91,76,245,0.15); }
+
+/* ── Page body ── */
+.page-body { flex: 1; overflow-y: auto; padding: 22px 24px; }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s; border: none; font-family: var(--dm);
+  white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 14px var(--accent-glow); }
+.btn-primary:hover { background: var(--accent2); transform: translateY(-1px); box-shadow: 0 4px 20px var(--accent-glow); }
+.btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border2); }
+.btn-ghost:hover { background: var(--surface2); color: var(--text); }
+.btn-danger { background: rgba(255,107,107,0.1); color: var(--coral); border: 1px solid rgba(255,107,107,0.25); }
+.btn-danger:hover { background: rgba(255,107,107,0.18); }
+.btn-sm { padding: 5px 11px; font-size: 12px; border-radius: 7px; }
+.btn-folder {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 8px; font-size: 16px;
+  background: transparent; border: 1px solid var(--border2);
+  color: var(--text2); cursor: pointer; transition: all .15s;
+  text-decoration: none;
+}
+.btn-folder:hover { background: var(--surface2); border-color: var(--accent); transform: translateY(-1px); }
+
+/* ── Cards ── */
+.card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px; }
+.card-sm { padding: 14px 16px; }
+
+/* ── Badges ── */
+.badge { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.04em; }
+.badge-urgent  { background: rgba(255,107,107,0.12); color: #dc2626; }
+.badge-high    { background: rgba(251,191,36,0.12);  color: #b45309; }
+.badge-medium  { background: rgba(91,76,245,0.10);   color: #5b4cf5; }
+.badge-low     { background: rgba(52,211,153,0.12);  color: #059669; }
+.badge-active  { background: rgba(52,211,153,0.12);  color: #059669; }
+.badge-on_hold { background: rgba(251,191,36,0.12);  color: #b45309; }
+.badge-done    { background: rgba(52,211,153,0.12);  color: #059669; }
+.badge-review  { background: rgba(56,189,248,0.12);  color: #0284c7; }
+.badge-in_progress { background: rgba(91,76,245,0.10); color: #5b4cf5; }
+.badge-backlog { background: rgba(136,136,170,0.12); color: #7777aa; }
+
+/* ── Alerts ── */
+.messages-wrap { margin-bottom: 14px; }
+.alert { padding: 10px 14px; border-radius: var(--radius); font-size: 13px; margin-bottom: 8px; border: 1px solid; animation: slideIn 0.25s ease; }
+@keyframes slideIn { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+.alert-success { background: rgba(52,211,153,0.08); color: #065f46; border-color: rgba(52,211,153,0.25); }
+.alert-error   { background: rgba(255,107,107,0.08); color: #7f1d1d; border-color: rgba(255,107,107,0.25); }
+.alert-warning { background: rgba(251,191,36,0.08);  color: #78350f; border-color: rgba(251,191,36,0.25); }
+
+/* ── Forms ── */
+.form-group { margin-bottom: 16px; }
+.form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 5px; letter-spacing: 0.01em; }
+.form-control {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--text); border-radius: var(--radius); padding: 9px 12px;
+  font-size: 13px; font-family: var(--dm); outline: none; transition: border 0.15s;
+}
+.form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,76,245,0.12); }
+.form-hint { font-size: 11px; color: var(--text3); margin-top: 3px; }
+.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* ── Progress ── */
+.progress { height: 5px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; transition: width 0.6s cubic-bezier(.34,1.2,.64,1); }
+
+/* ── Avatar ── */
+.avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #fff; flex-shrink: 0; }
+
+/* ── Tables ── */
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table th { text-align: left; font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.table td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.table tr:hover td { background: rgba(91,76,245,0.02); }
+.table tr:last-child td { border-bottom: none; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+
+/* ── Animations ── */
+@keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+@keyframes scaleIn { from{opacity:0;transform:scale(0.94)} to{opacity:1;transform:scale(1)} }
+.fade-up { animation: fadeUp 0.35s ease both; }
+.pulse { display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(52,211,153,0.4);animation:pls 2s infinite }
+@keyframes pls { 0%{box-shadow:0 0 0 0 rgba(52,211,153,0.4)}70%{box-shadow:0 0 0 6px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)} }
+
+/* ── Modal ── */
+.modal-overlay { position:fixed;inset:0;background:rgba(10,10,20,0.6);backdrop-filter:blur(5px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.2s; }
+.modal-overlay.open { opacity:1;pointer-events:all; }
+.modal-box { background:var(--white);border-radius:var(--radius-xl);padding:28px;width:560px;max-width:96vw;max-height:90vh;overflow-y:auto;transform:scale(0.94) translateY(14px);transition:all 0.25s cubic-bezier(.34,1.2,.64,1);box-shadow:var(--shadow-lg); }
+.modal-overlay.open .modal-box { transform:scale(1) translateY(0); }
+.modal-header { display:flex;justify-content:space-between;align-items:center;margin-bottom:20px; }
+.modal-title { font-family:var(--syne);font-size:17px;font-weight:800;color:var(--text);letter-spacing:-0.5px; }
+.modal-close { width:28px;height:28px;border-radius:50%;background:var(--surface2);border:none;cursor:pointer;font-size:13px;color:var(--text3);display:flex;align-items:center;justify-content:center;transition:all 0.15s; }
+.modal-close:hover { background:rgba(255,107,107,0.1);color:var(--coral); }
+
+/* Section titles */
+.section-title { font-family:var(--syne);font-size:15px;font-weight:800;color:var(--text);letter-spacing:-0.3px; }
+.section-row { display:flex;align-items:center;justify-content:space-between;margin-bottom:16px; }
+</style>
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+<div class="shell">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sb-logo">
+      <div class="sb-mark" style="background:transparent;padding:0;overflow:visible;width:36px;height:36px;flex-shrink:0"><svg viewBox="0 0 100 115" xmlns="http://www.w3.org/2000/svg" width="36" height="36"><path d="M50 2 L95 28 L95 87 L50 113 L5 87 L5 28 Z" fill="#3a2e00" stroke="#f5c200" stroke-width="3"/><path d="M50 10 L88 32 L88 82 L50 104 L12 82 L12 32 Z" fill="#2a2200"/><text x="50" y="74" text-anchor="middle" font-family="Arial Black,sans-serif" font-weight="900" font-size="52" fill="#f5c200">G</text></svg></div>
+      <div>
+        <div class="sb-name">G Project</div>
+        <div class="sb-tag">Gestão de Projetos</div>
+      </div>
+    </div>
+
+    <nav style="padding: 6px 0; flex: 1">
+      <div class="sb-section">Menu</div>
+      <a href="{% url 'projects:dashboard' %}" class="sb-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+        <span class="sb-ico"><svg width="15" height="15" viewBox="0 0 15 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="5.5" height="5.5" rx="1.2"/><rect x="8.5" y="1" width="5.5" height="5.5" rx="1.2"/><rect x="1" y="8.5" width="5.5" height="5.5" rx="1.2"/><rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1.2"/></svg></span> Visão Geral
+      </a>
+      <a href="{% url 'projects:list' %}" class="sb-item {% if request.resolver_match.url_name == 'list' %}active{% endif %}">
+        <span class="sb-ico"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="13" height="4" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="1" y="7" width="13" height="4" rx="1.2" stroke="currentColor" stroke-width="1.3"/><rect x="1" y="13" width="6" height="1" rx=".5" fill="currentColor"/></svg></span>
+        Projetos
+      </a>
+      <a href="/tasks/my/" class="sb-item {% if request.path == '/tasks/my/' %}active{% endif %}">
+        <span class="sb-ico"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5.5 4h8M5.5 7.5h6M5.5 11h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M1.5 3.5l1 1.2 2-2.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.5 7.5l1 1 2-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="2.5" cy="11" r="1" fill="currentColor"/></svg></span> Minhas Tarefas
+      </a>
+      <a href="{% url 'accounts:team' %}" class="sb-item {% if request.resolver_match.url_name == 'team' %}active{% endif %}">
+        <span class="sb-ico"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="5.5" cy="4.5" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M1 13c0-2.485 2.015-4.5 4.5-4.5S10 10.515 10 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="11.5" cy="5" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M13.5 13c0-1.657-.987-3.086-2.404-3.754" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span> Equipe
+      </a>
+      <a href="{% url 'projects:equipes' %}" class="sb-item {% if request.resolver_match.url_name == 'equipes' %}active{% endif %}">
+        <span class="sb-ico"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="4" width="5" height="7" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="4" width="5" height="7" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M6 7.5h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span> Equipes Técnicas
+      </a>
+      <a href="{% url 'projects:insights' %}" class="sb-item {% if request.resolver_match.url_name == 'insights' %}active{% endif %}">
+        <span class="sb-ico"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.5 11.5l3-4 3 2.5 3-5 3 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span> Insights
+      </a>
+
+    </nav>
+
+
+    <div class="sb-user">
+      <div style="position:relative;flex-shrink:0">
+        {% if request.user.photo %}
+        <img src="{{ request.user.photo.url }}" alt="" style="width:30px;height:30px;border-radius:50%;object-fit:cover;display:block">
+        {% else %}
+        <div class="sb-avatar" style="background:{{ request.user.avatar_color|default:'#5b4cf5' }}">{{ request.user.initials }}</div>
+        {% endif %}
+        <span style="position:absolute;bottom:0;right:0;width:9px;height:9px;border-radius:50%;background:#34d399;border:2px solid var(--ink);box-shadow:0 0 0 0 rgba(52,211,153,.4);animation:pls 2s infinite"></span>
+      </div>
+      <div>
+        <div class="sb-uname">{{ user.get_full_name|default:user.username }}</div>
+        <div class="sb-urole">{{ user.get_role_display }} · Online</div>
+      </div>
+      <a href="{% url 'notifications:list' %}" class="sb-logout {% if request.resolver_match.namespace == 'notifications' %}active{% endif %}" title="Notificações" style="position:relative;{% if request.resolver_match.namespace == 'notifications' %}color:var(--accent2){% endif %}">
+        🔔
+        <span id="sb-notif-badge" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--coral);color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:10px;min-width:14px;text-align:center;line-height:14px"></span>
+      </a>
+      <a href="{% url 'accounts:profile' %}" class="sb-logout {% if request.resolver_match.url_name == 'profile' %}active{% endif %}" title="Meu Perfil" style="{% if request.resolver_match.url_name == 'profile' %}color:var(--accent2){% endif %}">⚙</a>
+      <button class="sb-logout" id="dark-btn" title="Modo escuro" onclick="toggleDark()" style="background:none;border:none;cursor:pointer;font-size:14px;padding:0">☀</button>
+      <a href="{% url 'accounts:logout' %}" class="sb-logout" title="Sair">⏻</a>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      {% block topbar_left %}
+      <div class="topbar-title">{% block page_title %}FlowSpace{% endblock %}</div>
+      {% endblock %}
+      <div class="topbar-right">
+        {% block topbar_actions %}{% endblock %}
+      </div>
+    </div>
+
+    <div class="page-body">
+      {% if messages %}
+      <div class="messages-wrap">
+        {% for msg in messages %}
+        <div class="alert alert-{% if msg.tags == 'error' %}error{% elif msg.tags == 'success' %}success{% else %}warning{% endif %}">{{ msg }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+
+<script>
+// Dark mode
+function toggleDark() {
+  const on = document.body.classList.toggle('dark-mode');
+  const btn = document.getElementById('dark-btn');
+  if (btn) btn.textContent = on ? '🌙' : '☀';
+  localStorage.setItem('gproject-dark', on ? '1' : '0');
+}
+(function() {
+  if (localStorage.getItem('gproject-dark') === '1') {
+    document.body.classList.add('dark-mode');
+    const btn = document.getElementById('dark-btn');
+    if (btn) btn.textContent = '🌙';
+  }
+})();
+
+// ── Notification badge ───────────────────────────────────────────────────────
+(function() {
+  async function updateNotifBadge() {
+    try {
+      const res  = await fetch('/api/notifications/');
+      const data = await res.json();
+      const unread = Array.isArray(data) ? data.filter(n => !n.read).length : 0;
+      const badge = document.getElementById('sb-notif-badge');
+      if (badge) {
+        badge.style.display = unread > 0 ? '' : 'none';
+        badge.textContent   = unread > 0 ? String(unread) : '';
+      }
+    } catch {}
+  }
+  updateNotifBadge();
+  setInterval(updateNotifBadge, 60000);
+})();
+
+// ── Presence heartbeat global — server-side (roda em todas as páginas) ──────
+(function() {
+  const CSRF = '{{ csrf_token }}';
+  async function ping() {
+    try {
+      await fetch('/api/presence/heartbeat/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': CSRF, 'Content-Type': 'application/json' },
+      });
+    } catch(_) {}
+  }
+  ping();
+  setInterval(ping, 20000);
+})();
+</script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

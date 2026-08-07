@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Equipe — G Project{% endblock %}
+{% block page_title %}Equipe{% endblock %}
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="document.getElementById('invite-modal').classList.add('open')">+ Convidar Membro</button>
+{% endblock %}
+{% block content %}
+<div class="card fade-up">
+  <table class="table">
+    <thead><tr><th>Membro</th><th>Cargo</th><th>Função</th><th>Projetos</th><th>Status</th><th>Ações</th></tr></thead>
+    <tbody>
+    {% for u in team_users %}
+    <tr>
+      <td><div style="display:flex;align-items:center;gap:10px"><div class="avatar" style="background:{{ u.avatar_color }}">{{ u.initials }}</div><div><div style="font-weight:500">{{ u.get_full_name|default:u.username }}</div><div style="font-size:11px;color:var(--text3)">{{ u.email }}</div></div></div></td>
+      <td style="font-size:12px;color:var(--text2)">{{ u.job_title|default:"—" }}</td>
+      <td><span class="badge badge-medium">{{ u.get_role_display }}</span></td>
+      <td style="font-size:12px;color:var(--text2)">{{ u.projects.count }}</td>
+      <td>{% if u.is_active %}<span class="badge badge-active">Ativo</span>{% else %}<span class="badge">Inativo</span>{% endif %}</td>
+      <td>
+        {% if request.user.can_manage %}
+        <form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="change_role"><input type="hidden" name="user_id" value="{{ u.id }}">
+        <select name="role" onchange="this.form.submit()" class="form-control" style="padding:3px 6px;font-size:11px;width:auto">
+          <option value="owner" {% if u.role == 'owner' %}selected{% endif %}>Proprietário</option>
+          <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Admin</option>
+          <option value="manager" {% if u.role == 'manager' %}selected{% endif %}>Gerente</option>
+          <option value="member" {% if u.role == 'member' %}selected{% endif %}>Membro</option>
+          <option value="guest" {% if u.role == 'guest' %}selected{% endif %}>Convidado</option>
+        </select></form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="modal-overlay" id="invite-modal">
+  <div class="modal-box" style="max-width:440px">
+    <div class="modal-header"><div class="modal-title">Convidar Membro</div><button class="modal-close" onclick="document.getElementById('invite-modal').classList.remove('open')">✕</button></div>
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="invite">
+      <div class="form-group"><label class="form-label">Username</label><input type="text" name="username" class="form-control" required></div>
+      <div class="form-group"><label class="form-label">Email</label><input type="email" name="email" class="form-control" required></div>
+      <div class="form-group"><label class="form-label">Função</label><select name="role" class="form-control"><option value="member">Membro</option><option value="manager">Gerente</option><option value="guest">Convidado</option></select></div>
+      <div style="display:flex;gap:8px;margin-top:6px"><button type="submit" class="btn btn-primary" style="flex:1">Criar Usuário</button><button type="button" class="btn btn-ghost" onclick="document.getElementById('invite-modal').classList.remove('open')">Cancelar</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}

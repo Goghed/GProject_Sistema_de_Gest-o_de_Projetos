@@ -1,0 +1,591 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — Kanban{% endblock %}
+{% block topbar_left %}
+<div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:2px">
+    <a href="{% url 'projects:dashboard' %}" style="color:var(--text3)">Projetos</a> /
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div style="width:10px;height:10px;border-radius:50%;background:{{ project.color }}"></div>
+    <div class="topbar-title">{{ project.name }}</div>
+  </div>
+</div>
+{% endblock %}
+{% block topbar_actions %}
+<div class="view-pills">
+  <a href="{% url 'projects:kanban' pk=project.pk %}" class="vpill active">⊞ Kanban</a>
+  <a href="{% url 'projects:timeline' pk=project.pk %}" class="vpill">◷ Timeline</a>
+  <a href="{% url 'projects:task_list' pk=project.pk %}" class="vpill">≡ Lista</a>
+</div>
+
+<!-- Member presence avatars -->
+<div style="display:flex;align-items:center;gap:3px;padding:0 4px" id="presence-bar">
+  {% for member in project.members.all %}
+  <div style="position:relative" title="{{ member.get_full_name|default:member.username }}">
+    <div style="width:28px;height:28px;border-radius:50%;background:{{ member.avatar_color }};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;border:2px solid var(--white);box-shadow:0 0 0 1.5px var(--border)">
+      {{ member.initials }}
+    </div>
+    <span class="presence-dot {% if member == request.user %}is-me{% endif %} offline"
+          data-uid="{{ member.id }}"
+          style="position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;border:2px solid var(--white);background:#aaa;display:block">
+    </span>
+  </div>
+  {% endfor %}
+</div>
+
+<button class="btn btn-ghost btn-sm" onclick="openNewTask()">+ Tarefa</button>
+<a href="{% url 'projects:project_scope' project.id %}" class="btn-folder"> 📁 </a>
+{% if can_report %}
+<a href="{% url 'projects:report' pk=project.pk %}" class="btn btn-sm" style="background:linear-gradient(135deg,{{ project.color }},{{ project.color }}cc);color:#fff;font-weight:700;gap:5px">📊 Relatório</a>
+{% endif %}
+<a href="{% url 'projects:settings' pk=project.pk %}" class="btn btn-ghost btn-sm">⚙</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+/* Project info panel */
+.proj-panel {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); margin-bottom: 14px; overflow: hidden;
+}
+.proj-panel-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 16px; cursor: pointer; user-select: none;
+  border-bottom: 1px solid var(--border); transition: background .14s;
+}
+.proj-panel-header:hover { background: var(--surface2); }
+.proj-panel-body { display: none; }
+.proj-panel-body.open { display: block; }
+.proj-panel-chevron { margin-left: auto; font-size: 12px; color: var(--text3); transition: transform .2s; }
+.proj-panel-chevron.open { transform: rotate(180deg); }
+
+/* Info grid inside panel */
+.proj-info-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+.proj-info-cell {
+  padding: 12px 18px; border-right: 1px solid var(--border);
+}
+.proj-info-cell:last-child { border-right: none; }
+.proj-info-label { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 4px; }
+.proj-info-val   { font-size: 13px; font-weight: 600; color: var(--text); }
+
+/* Members row */
+.proj-members-row {
+  display: flex; gap: 0; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+.proj-member-cell {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border-right: 1px solid var(--border); flex: 1; min-width: 200px;
+}
+.proj-member-cell:last-child { border-right: none; }
+
+/* Scope body */
+.proj-scope-body {
+  padding: 14px 18px; font-size: 13px; color: var(--text2);
+  line-height: 1.75; white-space: pre-wrap;
+}
+
+/* Kanban layout — se ajusta ao número de colunas */
+.kanban-wrap { display: flex; flex-direction: column; min-height: calc(100vh - 160px); }
+.kanban-scroll {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: flex-start;
+  padding-bottom: 12px;
+  flex: 1;
+}
+.kanban-col { background:var(--surface2); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:0; min-width: 0; }
+.col-header { display:flex; align-items:center; gap:7px; margin-bottom:12px; }
+.col-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.col-name { font-family:var(--syne); font-size:11px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:0.07em; flex:1; }
+.col-count { font-size:11px; color:var(--text3); background:rgba(0,0,0,0.06); padding:2px 7px; border-radius:10px; font-weight:600; }
+.col-cards { min-height:60px; display:flex; flex-direction:column; gap:9px; flex:1; }
+
+/* Task card */
+.task-card {
+  background:var(--white); border:1px solid var(--border);
+  border-radius:11px; padding:13px; cursor:pointer;
+  transition: transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .22s, border-color .15s;
+  position:relative; overflow:hidden;
+}
+.task-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:11px 11px 0 0; background:var(--card-color,var(--accent)); opacity:0; transition:opacity .18s; }
+.task-card:hover { transform:translateY(-3px) scale(1.01); box-shadow:var(--shadow-lg); border-color:var(--border2); }
+.task-card:hover::before { opacity:1; }
+.task-card.dragging { opacity:.5; transform:rotate(2deg) scale(1.03); box-shadow:var(--shadow-lg); }
+.task-card.drag-over { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-glow); }
+
+.card-tags { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
+.card-tag { font-size:10px; font-weight:600; padding:2px 7px; border-radius:20px; }
+.card-title { font-family:var(--syne); font-size:13px; font-weight:600; color:var(--text); line-height:1.4; margin-bottom:8px; }
+.card-desc { font-size:11px; color:var(--text3); line-height:1.5; margin-bottom:9px; }
+.card-footer { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.card-due { font-size:10px; font-weight:600; padding:2px 7px; border-radius:6px; display:flex; align-items:center; gap:3px; }
+.due-ok   { background:rgba(52,211,153,.1); color:#059669; }
+.due-warn { background:rgba(251,191,36,.1);  color:#b45309; }
+.due-late { background:rgba(255,107,107,.1); color:#dc2626; }
+.card-avatars { margin-left:auto; display:flex; }
+.mini-av { width:21px; height:21px; border-radius:50%; border:2px solid var(--white); margin-left:-5px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:700; color:#fff; }
+.card-progress { margin-top:9px; }
+.card-progress-label { display:flex; justify-content:space-between; font-size:10px; color:var(--text3); margin-bottom:3px; }
+
+.col-add { width:100%; padding:8px; border-radius:8px; border:1.5px dashed rgba(91,76,245,.18); background:transparent; color:var(--text3); font-size:12px; cursor:pointer; transition:all .15s; font-family:var(--dm); margin-top:8px; }
+.col-add:hover { border-color:var(--accent); color:var(--accent); background:rgba(91,76,245,.04); }
+
+/* Daily report mini-bar */
+.dr-bar-wrap { margin-top:9px; }
+.dr-bar-label { display:flex; justify-content:space-between; align-items:center; font-size:10px; color:var(--text3); margin-bottom:4px; }
+.dr-bar-label span { display:flex; align-items:center; gap:3px; }
+.dr-bar { display:flex; height:5px; border-radius:6px; overflow:hidden; background:var(--surface3); }
+.dr-seg-ok  { background:#34d399; transition:width .3s; }
+.dr-seg-bad { background:#ff6b6b; transition:width .3s; }
+.dr-seg-pnd { background:var(--border2); transition:width .3s; }
+/* ── Tarefa Bloqueada ── */
+@keyframes blocked-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(220,38,38,.7); border-color:#dc2626; }
+  50%  { box-shadow: 0 0 0 8px rgba(220,38,38,0); border-color:rgba(220,38,38,.3); }
+  100% { box-shadow: 0 0 0 0 rgba(220,38,38,.7); border-color:#dc2626; }
+}
+.task-card.blocked {
+  border: 2px solid #dc2626 !important;
+  animation: blocked-pulse 1.6s ease-in-out infinite !important;
+  overflow: visible !important;
+}
+
+
+/* Drop zone highlight */
+.drop-zone-active { background:rgba(91,76,245,.06); border:2px dashed var(--accent); border-radius:9px; min-height:40px; }
+
+/* New task modal extras */
+.color-swatches { display:flex; gap:6px; flex-wrap:wrap; }
+.swatch { width:24px; height:24px; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:all .15s; }
+.swatch.selected { border-color: #fff; box-shadow:0 0 0 2px var(--accent); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="kanban-wrap">
+
+<div class="proj-panel">
+  <!-- Header colapsável -->
+  <div class="proj-panel-header" onclick="toggleScope()">
+    <div style="width:10px;height:10px;border-radius:50%;background:{{ project.color }};flex-shrink:0"></div>
+    <span style="font-family:var(--syne);font-size:13px;font-weight:800;color:var(--text)">{{ project.name }}</span>
+    <span class="badge badge-{{ project.status }}" style="margin-left:2px">{{ project.get_status_display }}</span>
+    {% if project.due_date %}
+    <span style="font-size:11px;color:var(--text3);margin-left:6px">📅 Prazo: {{ project.due_date|date:"d/m/Y" }}</span>
+    {% endif %}
+    <span class="proj-panel-chevron" id="scope-chev">▼</span>
+  </div>
+
+  <!-- Corpo colapsável -->
+  <div class="proj-panel-body" id="scope-body">
+
+    <!-- Linha de métricas -->
+    <div class="proj-info-grid">
+      <div class="proj-info-cell">
+        <div class="proj-info-label">⏱ Tempo de Execução</div>
+        <div class="proj-info-val">
+          {% if project.start_date and project.due_date %}
+            {% with delta=project.due_date|timeuntil:project.start_date %}
+            {{ project.start_date|date:"d/m/Y" }} → {{ project.due_date|date:"d/m/Y" }}
+            {% endwith %}
+          {% elif project.start_date %}
+            Início: {{ project.start_date|date:"d/m/Y" }}
+          {% elif project.due_date %}
+            Prazo: {{ project.due_date|date:"d/m/Y" }}
+          {% else %}
+            <span style="color:var(--text3);font-weight:400">Não definido</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="proj-info-cell">
+        <div class="proj-info-label">📊 Progresso</div>
+        <div class="proj-info-val">
+          {{ project.completed_count }}/{{ project.task_count }} tarefas
+          <div class="progress" style="margin-top:6px;height:4px">
+            <div class="progress-fill" style="width:{{ project.progress }}%;background:{{ project.color }}"></div>
+          </div>
+        </div>
+      </div>
+      <div class="proj-info-cell">
+        <div class="proj-info-label">👥 Equipe</div>
+        <div style="display:flex;gap:-4px;margin-top:2px">
+          {% for m in project.members.all|slice:":8" %}
+          <div class="avatar" style="background:{{ m.avatar_color }};border:2px solid var(--white);margin-left:{% if not forloop.first %}-6px{% else %}0{% endif %};font-size:9px" title="{{ m.get_full_name|default:m.username }}">
+            {% if m.photo %}<img src="{{ m.photo.url }}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">{% else %}{{ m.initials }}{% endif %}
+          </div>
+          {% endfor %}
+          {% if project.members.count > 8 %}
+          <div class="avatar" style="background:var(--surface3);color:var(--text3);border:2px solid var(--white);margin-left:-6px;font-size:9px">+{{ project.members.count|add:"-8" }}</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Membros e responsabilidades -->
+    {% if project.member_activities.exists or project.members.exists %}
+    <div class="proj-members-row">
+      {% for m in project.members.all %}
+      <div class="proj-member-cell">
+        <div style="position:relative;flex-shrink:0">
+          {% if m.photo %}
+          <img src="{{ m.photo.url }}" style="width:34px;height:34px;border-radius:50%;object-fit:cover">
+          {% else %}
+          <div class="avatar" style="background:{{ m.avatar_color }};width:34px;height:34px;font-size:11px">{{ m.initials }}</div>
+          {% endif %}
+        </div>
+        <div style="min-width:0">
+          <div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.get_full_name|default:m.username }}</div>
+          <div style="font-size:10px;color:var(--text3)">{{ m.get_role_display }}{% if m.job_title %} · {{ m.job_title }}{% endif %}</div>
+          {% for ma in project.member_activities.all %}{% if ma.user == m and ma.activity %}
+          <div style="font-size:11px;color:{{ project.color }};margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">↳ {{ ma.activity }}</div>
+          {% endif %}{% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Escopo textual -->
+    {% if project.scope %}
+    <div class="proj-scope-body">
+      <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">📝 Escopo</div>
+      {{ project.scope }}
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<div class="kanban-scroll" id="kanban-board">
+  {% for col in columns %}
+  <div class="kanban-col" id="col-{{ col.id }}" data-col-id="{{ col.id }}">
+    <div class="col-header">
+      <div class="col-dot" style="background:{{ col.color }}"></div>
+      <div class="col-name">{{ col.name }}</div>
+      <div class="col-count" id="count-{{ col.id }}">{{ col.tasks.count }}</div>
+    </div>
+    <div class="col-cards" id="cards-{{ col.id }}"
+         ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'{{ col.id }}')">
+      {% for task in col.tasks.all %}
+      <div class="task-card{% if task.is_blocked %} blocked{% endif %}" id="task-{{ task.id }}" draggable="true"
+           style="--card-color:{{ task.project.color }}"
+           ondragstart="onDragStart(event,'{{ task.id }}')"
+           ondragend="onDragEnd(event)"
+           onclick="openTask('{% url 'tasks:detail' pk=task.pk %}')">
+        {% if task.tag_list %}
+        <div class="card-tags">
+          {% for tag in task.tag_list|slice:":2" %}
+          <span class="card-tag" style="background:{{ task.project.color }}18;color:{{ task.project.color }}">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="card-title" style="flex:1">{{ task.title }}</div>
+          {% if task.is_blocked %}<span title="Bloqueada por problema" style="font-size:11px">🚨</span>{% endif %}
+          {% if task.has_pending_deps %}<span title="Aguardando conclusão de dependências" style="font-size:11px">🔒</span>{% endif %}
+        </div>
+        {% if task.description %}
+        <div class="card-desc">{{ task.description|truncatechars:70 }}</div>
+        {% endif %}
+        <div class="card-footer">
+          {% if task.due_date %}
+          <span class="card-due {% if task.due_date < today %}due-late{% elif task.due_date <= today_plus3 %}due-warn{% else %}due-ok{% endif %}">
+            ◷ {{ task.due_date|date:"d/m" }}
+          </span>
+          {% endif %}
+          <span class="badge badge-{{ task.priority }}">{{ task.get_priority_display }}</span>
+          <div class="card-avatars">
+            {% for a in task.assignees.all|slice:":3" %}
+            <div class="mini-av" style="background:{{ a.avatar_color }}" title="{{ a }}">{{ a.initials }}</div>
+            {% endfor %}
+          </div>
+        </div>
+        {% if task.subtasks.exists %}
+        <div class="card-progress">
+          <div class="card-progress-label">
+            <span>{{ task.progress }}% concluído</span>
+            <span>{{ task.progress }}%</span>
+          </div>
+          <div class="progress"><div class="progress-fill" style="width:{{ task.progress }}%;background:{{ task.project.color }}"></div></div>
+        </div>
+        {% endif %}
+        {% with ds=task.daily_summary %}{% if ds.has_data %}
+        <div class="dr-bar-wrap">
+          <div class="dr-bar-label">
+            <span title="Dias produtivos">✅ {{ ds.accomplished }}</span>
+            <span title="Dias improdutivos" style="color:#ff6b6b">❌ {{ ds.not_accomplished }}</span>
+            <span title="Dias pendentes">⏳ {{ ds.pending }}/{{ ds.total }}d</span>
+          </div>
+          <div class="dr-bar">
+            {% if ds.total > 0 %}
+            <div class="dr-seg-ok"  style="width:{% widthratio ds.accomplished     ds.total 100 %}%"></div>
+            <div class="dr-seg-bad" style="width:{% widthratio ds.not_accomplished ds.total 100 %}%"></div>
+            <div class="dr-seg-pnd" style="width:{% widthratio ds.pending          ds.total 100 %}%"></div>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}{% endwith %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+</div><!-- /kanban-wrap -->
+
+<!-- New Task Modal -->
+<div class="modal-overlay" id="new-task-modal">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title">Nova Tarefa</div>
+      <button class="modal-close" onclick="closeNewTask()">✕</button>
+    </div>
+    <form id="new-task-form">
+      {% csrf_token %}
+      <input type="hidden" id="nt-column" name="column">
+      <div class="form-group">
+        <label class="form-label">Título *</label>
+        <input type="text" name="title" class="form-control" placeholder="O que precisa ser feito?" required autofocus>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descrição</label>
+        <textarea name="description" class="form-control" rows="3" placeholder="Contexto, detalhes, critérios de aceite..."></textarea>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Prioridade</label>
+          <select name="priority" class="form-control">
+            <option value="urgent">🔴 Urgente</option>
+            <option value="high">🟠 Alta</option>
+            <option value="medium" selected>🔵 Média</option>
+            <option value="low">🟢 Baixa</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prazo</label>
+          <input type="date" name="due_date" id="nt-due-date" class="form-control">
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Data Inicial</label>
+          <input type="date" name="start_date" id="nt-start-date" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Duração (dias)</label>
+          <input type="number" name="duration_days" id="nt-duration" class="form-control" min="1" placeholder="Ex: 3">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Responsáveis</label>
+        <select name="assignees" class="form-control" multiple size="4">
+          {% for u in all_users %}
+          <option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tags (separar por vírgula)</label>
+        <input type="text" name="tags" class="form-control" placeholder="Design, Dev, Urgente">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Subtarefas (uma por linha)</label>
+        <textarea name="subtasks" class="form-control" rows="3" placeholder="Pesquisa de referências&#10;Criar wireframe&#10;Aprovar com cliente"></textarea>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(91,76,245,.06);border:1.5px solid rgba(91,76,245,.2);border-radius:var(--radius);cursor:pointer;margin-bottom:6px">
+        <input type="checkbox" name="needs_review" value="1" id="nt-needs-review"
+               style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">Requer revisão do gestor</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:1px">Após concluir, a tarefa vai para <strong>Review</strong> antes de ser finalizada</div>
+        </div>
+      </label>
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius);cursor:pointer;flex:1">
+          <input type="checkbox" name="work_saturday" value="1"
+                 style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text)">🗓 Sábado trabalha</div>
+            <div style="font-size:10px;color:var(--text3)">Sábado é dia útil nesta tarefa</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius);cursor:pointer;flex:1">
+          <input type="checkbox" name="work_sunday" value="1"
+                 style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text)">🗓 Domingo trabalha</div>
+            <div style="font-size:10px;color:var(--text3)">Domingo é dia útil nesta tarefa</div>
+          </div>
+        </label>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button type="submit" class="btn btn-primary" style="flex:1">Criar Tarefa</button>
+        <button type="button" class="btn btn-ghost" onclick="closeNewTask()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const PROJECT_PK = "{{ project.pk }}";
+const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
+let draggedId = null, draggedEl = null;
+
+// ── Drag & Drop ────────────────────────────────────────────────────────────
+function onDragStart(e, taskId) {
+  draggedId = taskId;
+  draggedEl = document.getElementById('task-' + taskId);
+  draggedEl.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onDragEnd(e) {
+  if (draggedEl) draggedEl.classList.remove('dragging');
+  document.querySelectorAll('.col-cards').forEach(c => c.classList.remove('drop-zone-active'));
+}
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drop-zone-active');
+}
+function onDragLeave(e) {
+  e.currentTarget.classList.remove('drop-zone-active');
+}
+async function onDrop(e, colId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drop-zone-active');
+  if (!draggedId) return;
+
+  const container = document.getElementById('cards-' + colId);
+  const card = document.getElementById('task-' + draggedId);
+  container.appendChild(card);
+
+  // Atualiza contadores
+  updateCounts();
+
+  // Salva no servidor
+  const resp = await fetch(`/dashboard/tasks/${draggedId}/move/`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body: JSON.stringify({ column_id: colId, position: container.children.length - 1 })
+  });
+  const d = await resp.json();
+  if (!d.ok) console.error('Erro ao mover tarefa');
+  draggedId = null;
+}
+
+function updateCounts() {
+  document.querySelectorAll('.kanban-col').forEach(col => {
+    const colId = col.dataset.colId;
+    const count = col.querySelector('.col-cards').querySelectorAll('.task-card').length;
+    document.getElementById('count-' + colId).textContent = count;
+  });
+}
+
+// ── Task detail ─────────────────────────────────────────────────────────────
+function openTask(url) { window.location.href = url; }
+
+// ── New task modal ───────────────────────────────────────────────────────────
+function openNewTask(colId) {
+  document.getElementById('nt-column').value = colId || '';
+  document.getElementById('new-task-modal').classList.add('open');
+}
+function closeNewTask() {
+  document.getElementById('new-task-modal').classList.remove('open');
+  document.getElementById('new-task-form').reset();
+}
+
+document.getElementById('new-task-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('[type=submit]');
+  btn.disabled = true;
+  btn.textContent = 'Criando...';
+  try {
+    const fd = new FormData(e.target);
+    const resp = await fetch(`/tasks/project/${PROJECT_PK}/create/`, {
+      method: 'POST', body: fd,
+      headers: {'X-CSRFToken': CSRF}
+    });
+    const d = await resp.json();
+    if (d.ok) {
+      closeNewTask();
+      location.reload();
+    } else {
+      alert(d.error || 'Erro ao criar tarefa.');
+      btn.disabled = false;
+      btn.textContent = 'Criar Tarefa';
+    }
+  } catch(err) {
+    alert('Erro de comunicação com o servidor. Tente novamente.');
+    btn.disabled = false;
+    btn.textContent = 'Criar Tarefa';
+  }
+});
+
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeNewTask(); });
+
+// ── Scope toggle ─────────────────────────────────────────────────────────────
+function toggleScope() {
+  const body = document.getElementById('scope-body');
+  const chev = document.getElementById('scope-chev');
+  if (!body) return;
+  const open = body.classList.toggle('open');
+  chev.classList.toggle('open', open);
+  localStorage.setItem('gp_proj_panel_{{ project.pk }}', open ? '1' : '0');
+}
+// Restaura estado salvo
+(function() {
+  if (localStorage.getItem('gp_proj_panel_{{ project.pk }}') === '1') {
+    const body = document.getElementById('scope-body');
+    const chev = document.getElementById('scope-chev');
+    if (body) body.classList.add('open');
+    if (chev) chev.classList.add('open');
+  }
+})();
+
+// ── Presence dots (kanban topbar) ────────────────────────────────────────────
+(function() {
+  const MY_UID = '{{ request.user.id }}';
+  const HB_KEY = 'gp_hb_';
+  const HB_TTL = 35000;
+
+  function seen(uid) {
+    try { return Date.now() - parseInt(localStorage.getItem(HB_KEY + uid) || 0) < HB_TTL; } catch(_) { return false; }
+  }
+
+  function refreshDots() {
+    document.querySelectorAll('.presence-dot[data-uid]').forEach(dot => {
+      const on = dot.dataset.uid === MY_UID || dot.classList.contains('is-me') || seen(dot.dataset.uid);
+      dot.style.background = on ? '#34d399' : 'rgba(119,119,170,.4)';
+      if (on) {
+        dot.style.animation = 'pls 2s infinite';
+        dot.style.boxShadow = '0 0 0 0 rgba(52,211,153,.4)';
+      } else {
+        dot.style.animation = 'none';
+        dot.style.boxShadow = 'none';
+      }
+    });
+  }
+
+  refreshDots();
+  setInterval(refreshDots, 5000);
+
+  try {
+    const bc = new BroadcastChannel('gp_presence');
+    bc.onmessage = e => {
+      if (e.data && e.data.uid) {
+        try { localStorage.setItem(HB_KEY + e.data.uid, Date.now()); } catch(_) {}
+        refreshDots();
+      }
+    };
+  } catch(_) {}
+})();
+</script>
+{% endblock %}

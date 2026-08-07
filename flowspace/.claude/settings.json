@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python manage.py migrate tasks 0009_task_work_weekend)",
+      "Bash(.venv/Scripts/python manage.py migrate tasks 0009_task_work_weekend)",
+      "Bash(venv/Scripts/python.exe manage.py migrate tasks 0009_task_work_weekend)",
+      "Bash(venv/Scripts/python.exe manage.py makemigrations tasks --name issue_comment)",
+      "Bash(venv/Scripts/python.exe manage.py migrate)",
+      "Bash(venv/Scripts/python.exe -c \"import django; print\\(django.__version__\\)\")",
+      "Bash(venv/Scripts/python.exe manage.py shell -c ':*)",
+      "Bash(venv/Scripts/python.exe manage.py shell -c \"from apps.tasks.models import Task; t = Task.objects.filter\\(title__icontains='assinatura'\\).first\\(\\); print\\('title:', t.title if t else 'NOT FOUND'\\); print\\('status:', t.status if t else ''\\); print\\('needs_review:', t.needs_review if t else ''\\); print\\('column:', t.column.name if t and t.column else 'None'\\)\")",
+      "Bash(venv/Scripts/python.exe manage.py shell -c \"from apps.projects.models import *; print\\([x for x in dir\\(\\) if 'col' in x.lower\\(\\) or 'Col' in x]\\)\")",
+      "Bash(venv/Scripts/python.exe manage.py makemigrations accounts)",
+      "Bash(venv/Scripts/python.exe manage.py migrate accounts)",
+      "Bash(venv/Scripts/python.exe manage.py check)",
+      "Bash(npx tsc *)",
+      "Bash(venv/Scripts/python.exe manage.py check --deploy)",
+      "Bash(venv/Scripts/python.exe manage.py runserver 8000)",
+      "Bash(python -m json.tool)",
+      "Bash(venv/Scripts/python.exe test_system.py)",
+      "Bash(grep -n \"eval\\\\|exec\\\\|__import__\" \"/c/Users/369469018/Desktop/Gerenciamento de projetos/flowspace/apps\"/**/*.py)",
+      "Bash(ipconfig)",
+      "Bash(netsh advfirewall *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://172.10.10.149:8000/api/auth/login/ -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"x\",\"password\":\"x\"}')",
+      "Bash(venv/Scripts/python.exe manage.py shell -c \"from apps.accounts.models import User; users = User.objects.all\\(\\).values\\('username', 'is_active', 'is_superuser'\\); print\\(list\\(users\\)\\)\")"
+    ]
+  }
+}

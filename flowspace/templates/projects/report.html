@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% block title %}Relatório — {{ project.name }}{% endblock %}
+
+{% block topbar_left %}
+<div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:2px">
+    <a href="{% url 'projects:dashboard' %}" style="color:var(--text3)">Projetos</a> /
+    <a href="{% url 'projects:kanban' pk=project.pk %}" style="color:var(--text3)">{{ project.name }}</a> /
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div style="width:10px;height:10px;border-radius:50%;background:{{ project.color }}"></div>
+    <div class="topbar-title">Relatório Final</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'projects:kanban' pk=project.pk %}" class="btn btn-ghost btn-sm">← Kanban</a>
+<button onclick="window.print()" class="btn btn-sm" style="background:{{ project.color }};color:#fff;font-weight:700">🖨 Imprimir</button>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+.rpt-wrap { max-width: 900px; margin: 0 auto; padding-bottom: 60px; }
+
+/* Hero */
+.rpt-hero {
+  background: linear-gradient(135deg, {{ project.color }}22, {{ project.color }}08);
+  border: 1px solid {{ project.color }}33;
+  border-radius: var(--radius-lg); padding: 24px 28px; margin-bottom: 20px;
+  display: flex; align-items: center; gap: 20px;
+}
+.rpt-hero-dot { width: 16px; height: 16px; border-radius: 50%; background: {{ project.color }}; flex-shrink: 0; }
+.rpt-hero-title { font-family: var(--syne); font-size: 24px; font-weight: 800; color: var(--text); }
+.rpt-hero-sub { font-size: 12px; color: var(--text3); margin-top: 3px; }
+
+/* Stats row */
+.rpt-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.rpt-stat { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; text-align: center; }
+.rpt-stat-val { font-family: var(--syne); font-size: 26px; font-weight: 800; color: var(--text); line-height: 1; }
+.rpt-stat-label { font-size: 11px; color: var(--text3); margin-top: 4px; font-weight: 600; }
+
+/* Section card */
+.rpt-section { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 16px; overflow: hidden; }
+.rpt-section-head { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.rpt-section-title { font-family: var(--syne); font-size: 14px; font-weight: 800; color: var(--text); }
+.rpt-section-body { padding: 20px; }
+
+/* Task rows */
+.rpt-task-row { display: grid; grid-template-columns: 2fr 80px 80px 80px 80px 60px; gap: 0; align-items: center; border-bottom: 1px solid var(--border); }
+.rpt-task-row:last-child { border-bottom: none; }
+.rpt-task-head { background: var(--surface2); font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .07em; }
+.rpt-task-cell { padding: 10px 14px; font-size: 12px; color: var(--text); }
+.rpt-task-cell.center { text-align: center; }
+
+/* Mini bar */
+.mini-dr { display: flex; height: 6px; border-radius: 6px; overflow: hidden; background: var(--surface3); margin-top: 4px; }
+.mini-ok  { background: #34d399; }
+.mini-bad { background: #ff6b6b; }
+.mini-pnd { background: var(--border2); }
+
+/* Retrospective */
+.retro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.retro-card { border-radius: var(--radius); padding: 0; overflow: hidden; border: 1.5px solid; }
+.retro-card.ok   { border-color: rgba(52,211,153,.35); }
+.retro-card.nok  { border-color: rgba(255,107,107,.35); }
+.retro-header { padding: 10px 14px; font-size: 12px; font-weight: 700; }
+.retro-card.ok  .retro-header { background: rgba(52,211,153,.1); color: #059669; }
+.retro-card.nok .retro-header { background: rgba(255,107,107,.1); color: #dc2626; }
+.retro-ta { width: 100%; border: none; background: var(--white); color: var(--text); font-family: var(--dm); font-size: 13px; line-height: 1.7; padding: 14px; resize: vertical; min-height: 140px; outline: none; }
+
+.save-retro-btn { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.save-indicator { font-size: 11px; color: var(--text3); display: none; }
+
+/* Progress bar global */
+.rpt-global-bar { display: flex; height: 12px; border-radius: 8px; overflow: hidden; margin-top: 10px; }
+.rpt-bar-ok  { background: #34d399; }
+.rpt-bar-bad { background: #ff6b6b; }
+.rpt-bar-pnd { background: var(--border2); }
+
+@media print {
+  .topbar, .sidebar, .btn, button { display: none !important; }
+  .rpt-wrap { max-width: 100%; }
+  .retro-ta { border: 1px solid #ccc; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="rpt-wrap">
+
+  <!-- Hero -->
+  <div class="rpt-hero">
+    {% if project.cover_image %}
+    <img src="{{ project.cover_image.url }}" style="width:60px;height:60px;border-radius:12px;object-fit:cover;flex-shrink:0">
+    {% else %}
+    <div class="rpt-hero-dot"></div>
+    {% endif %}
+    <div style="flex:1">
+      <div class="rpt-hero-title">{{ project.name }}</div>
+      <div class="rpt-hero-sub">
+        {% if project.start_date %}{{ project.start_date|date:"d/m/Y" }}{% endif %}
+        {% if project.start_date and project.due_date %} → {% endif %}
+        {% if project.due_date %}{{ project.due_date|date:"d/m/Y" }}{% endif %}
+        &nbsp;·&nbsp; Gerado em {{ today|date:"d/m/Y" }}
+      </div>
+    </div>
+    <span class="badge badge-{{ project.status }}" style="font-size:12px;padding:5px 12px">{{ project.get_status_display }}</span>
+  </div>
+
+  <!-- Stats -->
+  <div class="rpt-stats">
+    <div class="rpt-stat">
+      <div class="rpt-stat-val">{{ total }}</div>
+      <div class="rpt-stat-label">Tarefas Totais</div>
+    </div>
+    <div class="rpt-stat">
+      <div class="rpt-stat-val" style="color:#34d399">{{ done }}</div>
+      <div class="rpt-stat-label">Concluídas</div>
+    </div>
+    <div class="rpt-stat">
+      <div class="rpt-stat-val" style="color:#ff6b6b">{{ blocked }}</div>
+      <div class="rpt-stat-label">Bloqueadas</div>
+    </div>
+    <div class="rpt-stat">
+      <div class="rpt-stat-val" style="color:{{ project.color }}">{{ project.progress }}%</div>
+      <div class="rpt-stat-label">Progresso</div>
+    </div>
+    {% if total_planned_days %}
+    <div class="rpt-stat">
+      <div class="rpt-stat-val" style="color:#34d399">{{ total_accomplished }}</div>
+      <div class="rpt-stat-label">Dias Produtivos</div>
+    </div>
+    <div class="rpt-stat">
+      <div class="rpt-stat-val" style="color:#ff6b6b">{{ total_not_accomplished }}</div>
+      <div class="rpt-stat-label">Dias Improdutivos</div>
+    </div>
+    <div class="rpt-stat">
+      <div class="rpt-stat-val">{{ total_planned_days }}</div>
+      <div class="rpt-stat-label">Dias Planejados</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Produtividade global -->
+  {% if total_planned_days %}
+  <div class="rpt-section" style="margin-bottom:16px">
+    <div class="rpt-section-head">
+      <span>📈</span>
+      <span class="rpt-section-title">Produtividade Global</span>
+      <span style="margin-left:auto;font-size:12px;color:var(--text3)">{{ total_accomplished }} produtivos · {{ total_not_accomplished }} improdutivos · {{ total_pending }} pendentes</span>
+    </div>
+    <div style="padding:16px 20px">
+      <div class="rpt-global-bar">
+        {% if total_planned_days %}
+        <div class="rpt-bar-ok"  style="width:{% widthratio total_accomplished     total_planned_days 100 %}%"></div>
+        <div class="rpt-bar-bad" style="width:{% widthratio total_not_accomplished total_planned_days 100 %}%"></div>
+        <div class="rpt-bar-pnd" style="width:{% widthratio total_pending          total_planned_days 100 %}%"></div>
+        {% endif %}
+      </div>
+      <div style="display:flex;gap:16px;margin-top:10px;font-size:11px">
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:#34d399;display:inline-block"></span>Produtivos ({% if total_planned_days %}{% widthratio total_accomplished total_planned_days 100 %}{% else %}0{% endif %}%)</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:#ff6b6b;display:inline-block"></span>Improdutivos ({% if total_planned_days %}{% widthratio total_not_accomplished total_planned_days 100 %}{% else %}0{% endif %}%)</span>
+        <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:var(--border2);display:inline-block"></span>Pendentes ({% if total_planned_days %}{% widthratio total_pending total_planned_days 100 %}{% else %}0{% endif %}%)</span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Tabela de tarefas -->
+  <div class="rpt-section">
+    <div class="rpt-section-head">
+      <span>📋</span>
+      <span class="rpt-section-title">Detalhamento por Tarefa</span>
+    </div>
+    <div style="overflow-x:auto">
+      <!-- Header -->
+      <div class="rpt-task-row rpt-task-head">
+        <div class="rpt-task-cell">Tarefa</div>
+        <div class="rpt-task-cell center">Status</div>
+        <div class="rpt-task-cell center" style="color:#34d399">✅ Prod.</div>
+        <div class="rpt-task-cell center" style="color:#ff6b6b">❌ Improd.</div>
+        <div class="rpt-task-cell center">⏳ Pend.</div>
+        <div class="rpt-task-cell center">Total</div>
+      </div>
+      {% for task in tasks %}
+      {% with ds=task.daily_summary %}
+      <div class="rpt-task-row">
+        <div class="rpt-task-cell">
+          <a href="{% url 'tasks:detail' pk=task.pk %}" style="font-weight:600;color:var(--text);text-decoration:none" target="_blank">{{ task.title }}</a>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">
+            {% for a in task.assignees.all|slice:":3" %}{{ a.get_full_name|default:a.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
+          </div>
+          {% if ds.has_data %}
+          <div class="mini-dr" style="margin-top:6px">
+            {% if ds.total %}<div class="mini-ok"  style="width:{% widthratio ds.accomplished     ds.total 100 %}%"></div>
+            <div class="mini-bad" style="width:{% widthratio ds.not_accomplished ds.total 100 %}%"></div>
+            <div class="mini-pnd" style="width:{% widthratio ds.pending          ds.total 100 %}%"></div>{% endif %}
+          </div>
+          {% endif %}
+        </div>
+        <div class="rpt-task-cell center"><span class="badge badge-{{ task.status }}" style="font-size:10px">{{ task.get_status_display }}</span></div>
+        <div class="rpt-task-cell center" style="font-weight:700;color:#059669">{% if ds.has_data %}{{ ds.accomplished }}{% else %}—{% endif %}</div>
+        <div class="rpt-task-cell center" style="font-weight:700;color:#dc2626">{% if ds.has_data %}{{ ds.not_accomplished }}{% else %}—{% endif %}</div>
+        <div class="rpt-task-cell center" style="color:var(--text3)">{% if ds.has_data %}{{ ds.pending }}{% else %}—{% endif %}</div>
+        <div class="rpt-task-cell center" style="font-weight:600">{% if ds.has_data %}{{ ds.total }}d{% else %}—{% endif %}</div>
+      </div>
+      {% endwith %}
+      {% empty %}
+      <div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Nenhuma tarefa encontrada.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Equipe -->
+  {% if project.members.exists %}
+  <div class="rpt-section">
+    <div class="rpt-section-head">
+      <span>👥</span>
+      <span class="rpt-section-title">Equipe do Projeto</span>
+    </div>
+    <div style="padding:16px 20px;display:flex;flex-wrap:wrap;gap:12px">
+      {% for m in project.members.all %}
+      <div style="display:flex;align-items:center;gap:10px;background:var(--surface2);padding:10px 14px;border-radius:var(--radius);min-width:180px">
+        {% if m.photo %}
+        <img src="{{ m.photo.url }}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0">
+        {% else %}
+        <div class="avatar" style="background:{{ m.avatar_color }};width:36px;height:36px;font-size:12px;flex-shrink:0">{{ m.initials }}</div>
+        {% endif %}
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">{{ m.get_full_name|default:m.username }}</div>
+          <div style="font-size:11px;color:var(--text3)">{{ m.get_role_display }}{% if m.job_title %} · {{ m.job_title }}{% endif %}</div>
+          {% for ma in project.member_activities.all %}{% if ma.user == m and ma.activity %}
+          <div style="font-size:11px;color:{{ project.color }};margin-top:1px">↳ {{ ma.activity }}</div>
+          {% endif %}{% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Retrospectiva -->
+  <div class="rpt-section" id="retro-section">
+    <div class="rpt-section-head">
+      <span>🔄</span>
+      <span class="rpt-section-title">Retrospectiva do Projeto</span>
+      <span style="margin-left:8px;font-size:11px;color:var(--text3)">— O que aprendemos para o próximo projeto</span>
+    </div>
+    <div class="rpt-section-body">
+      <div class="retro-grid">
+        <!-- O que deu certo -->
+        <div class="retro-card ok">
+          <div class="retro-header">✅ O que deu certo</div>
+          <textarea class="retro-ta" id="went-well" placeholder="Ex: A comunicação diária da equipe foi essencial. O planejamento de sprints funcionou bem...">{{ project.went_well }}</textarea>
+        </div>
+        <!-- O que não deu certo -->
+        <div class="retro-card nok">
+          <div class="retro-header">❌ O que deve ser melhorado / evitado</div>
+          <textarea class="retro-ta" id="went-wrong" placeholder="Ex: Estimativas de tempo estavam subestimadas. Dependência de fornecedor externo causou bloqueios...">{{ project.went_wrong }}</textarea>
+        </div>
+      </div>
+      <div class="save-retro-btn">
+        <span class="save-indicator" id="save-indicator">✓ Salvo</span>
+        <button onclick="saveRetro()" class="btn btn-primary btn-sm" id="save-retro-btn">💾 Salvar Retrospectiva</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+let saveTimer = null;
+
+async function saveRetro() {
+  const btn = document.getElementById('save-retro-btn');
+  const ind = document.getElementById('save-indicator');
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+  const r = await fetch("{% url 'projects:retrospective' pk=project.pk %}", {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({
+      went_well:  document.getElementById('went-well').value,
+      went_wrong: document.getElementById('went-wrong').value,
+    }),
+  });
+  const d = await r.json();
+  btn.disabled = false;
+  btn.textContent = '💾 Salvar Retrospectiva';
+  if (d.ok) {
+    ind.style.display = 'inline';
+    ind.style.color = '#059669';
+    setTimeout(() => ind.style.display = 'none', 3000);
+  }
+}
+
+// Auto-save com debounce de 2s ao digitar
+['went-well','went-wrong'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveRetro, 2000);
+  });
+});
+</script>
+{% endblock %}

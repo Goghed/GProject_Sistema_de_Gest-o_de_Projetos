@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Projetos — G Project{% endblock %}
+{% block page_title %}Todos os Projetos{% endblock %}
+{% block topbar_actions %}
+<a href="{% url 'projects:create' %}" class="btn btn-primary btn-sm">+ Novo Projeto</a>
+{% endblock %}
+{% block content %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
+{% for proj in projects %}
+<a href="{% url 'projects:kanban' pk=proj.pk %}" style="text-decoration:none">
+<div class="card fade-up" style="cursor:pointer;transition:all .2s;border-top:4px solid {{ proj.color }}" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='var(--shadow-md)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
+    <div style="font-family:var(--syne);font-size:15px;font-weight:700;color:var(--text)">{{ proj.name }}</div>
+    <span class="badge badge-{{ proj.status }}">{{ proj.get_status_display }}</span>
+  </div>
+  {% if proj.description %}<p style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:12px">{{ proj.description|truncatechars:80 }}</p>{% endif %}
+  <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:7px">
+    <span>{{ proj.completed_count }}/{{ proj.task_count }} tarefas</span>
+    <span>{{ proj.progress }}%</span>
+  </div>
+  <div class="progress"><div class="progress-fill" style="width:{{ proj.progress }}%;background:{{ proj.color }}"></div></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+    <div style="display:flex">{% for m in proj.members.all|slice:":4" %}<div class="avatar" style="background:{{ m.avatar_color }};margin-left:-4px;border:2px solid var(--white);font-size:9px">{{ m.initials }}</div>{% endfor %}</div>
+    {% if proj.due_date %}<span style="font-size:11px;color:var(--text3)">{{ proj.due_date|date:"d/m/Y" }}</span>{% endif %}
+  </div>
+</div>
+</a>
+{% empty %}
+<div class="card" style="text-align:center;padding:50px;grid-column:1/-1">
+  <div style="font-size:36px;margin-bottom:12px">✦</div>
+  <p style="color:var(--text3)">Nenhum projeto ainda.</p>
+  <a href="{% url 'projects:create' %}" class="btn btn-primary" style="margin-top:12px">Criar primeiro projeto</a>
+</div>
+{% endfor %}
+</div>
+{% endblock %}

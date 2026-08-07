@@ -1,0 +1,845 @@
+{% extends "base.html" %}
+{% block title %}Equipes Técnicas — G Project{% endblock %}
+{% block page_title %}Equipes Técnicas{% endblock %}
+
+{% block topbar_actions %}
+<div style="display:flex;gap:6px;align-items:center">
+  <a href="{% url 'projects:equipes' %}"
+     style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid var(--border2);{% if not cidade_filter %}background:var(--accent);color:#fff;border-color:var(--accent);{% else %}color:var(--text2);{% endif %}">
+    Todas
+  </a>
+  <a href="{% url 'projects:equipes' %}?cidade=londrina"
+     style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if cidade_filter == 'londrina' %}#dc2626{% else %}var(--border2){% endif %};{% if cidade_filter == 'londrina' %}background:#dc2626;color:#fff;{% else %}color:#dc2626;{% endif %}">
+    Londrina
+  </a>
+  <a href="{% url 'projects:equipes' %}?cidade=itu"
+     style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if cidade_filter == 'itu' %}#d97706{% else %}var(--border2){% endif %};{% if cidade_filter == 'itu' %}background:#d97706;color:#fff;{% else %}color:#d97706;{% endif %}">
+    Itu
+  </a>
+</div>
+<button class="btn btn-primary btn-sm" onclick="openAddModal()">
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+  Nova Equipe
+</button>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Team Cards ── */
+.eq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+.eq-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: box-shadow .2s, transform .2s;
+}
+.eq-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+
+.eq-header {
+  padding: 18px 18px 14px;
+  position: relative;
+}
+.eq-header::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(0,0,0,0.12) 0%, transparent 60%);
+  pointer-events: none;
+}
+.eq-initials {
+  width: 46px; height: 46px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--syne); font-size: 20px; font-weight: 800; color: #fff;
+  background: rgba(255,255,255,0.18);
+  backdrop-filter: blur(4px);
+  margin-bottom: 10px;
+}
+.eq-tecnico {
+  font-family: var(--syne); font-size: 16px; font-weight: 800; color: #fff;
+  letter-spacing: -0.4px; margin-bottom: 3px;
+}
+.eq-meta {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.eq-chip {
+  font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.75);
+  background: rgba(255,255,255,0.14);
+  padding: 2px 8px; border-radius: 20px;
+  display: flex; align-items: center; gap: 4px;
+}
+.eq-status-badge {
+  margin-left: auto;
+  font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.eq-status-active   { background: rgba(52,211,153,.2); color: #6ee7b7; }
+.eq-status-inactive { background: rgba(255,107,107,.2); color: #fca5a5; }
+
+/* ── Slots ── */
+.eq-slots { padding: 12px 14px; display: flex; flex-direction: column; gap: 7px; }
+
+.eq-slot {
+  border-radius: 8px; padding: 9px 11px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.eq-slot-atual   { background: #f0fdf4; border-left: 3px solid #22c55e; }
+.eq-slot-fila1   { background: #fffbeb; border-left: 3px solid #f59e0b; }
+.eq-slot-fila2   { background: #fff7ed; border-left: 3px solid #fb923c; }
+.eq-slot-fila3   { background: #f8fafc; border-left: 3px solid #94a3b8; }
+.eq-slot-empty   { background: var(--surface); border-left: 3px solid var(--border2); }
+
+.eq-slot-label {
+  font-size: 9px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 5px;
+}
+.eq-slot-atual .eq-slot-label { color: #16a34a; }
+.eq-slot-fila1 .eq-slot-label { color: #b45309; }
+.eq-slot-fila2 .eq-slot-label { color: #c2410c; }
+.eq-slot-fila3 .eq-slot-label { color: #64748b; }
+.eq-slot-empty .eq-slot-label { color: var(--text3); }
+
+.eq-slot-name {
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.eq-slot-atual .eq-slot-name  { color: #166534; }
+.eq-slot-fila1 .eq-slot-name  { color: #78350f; }
+.eq-slot-fila2 .eq-slot-name  { color: #7c2d12; }
+.eq-slot-fila3 .eq-slot-name  { color: #475569; }
+.eq-slot-empty .eq-slot-name  { color: var(--text3); font-style: italic; font-weight: 400; }
+
+.eq-slot-sub {
+  display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px;
+}
+.eq-tag {
+  font-size: 10px; padding: 1px 7px; border-radius: 8px; font-weight: 500;
+}
+.eq-slot-atual .eq-tag { background: #dcfce7; color: #15803d; }
+.eq-slot-fila1 .eq-tag { background: #fef3c7; color: #b45309; }
+.eq-slot-fila2 .eq-tag { background: #ffedd5; color: #c2410c; }
+.eq-slot-fila3 .eq-tag { background: #f1f5f9; color: #64748b; }
+
+.eq-slot-dates { font-size: 10px; color: #94a3b8; margin-top: 1px; }
+.eq-slot-atual .eq-slot-dates { color: #4ade80; }
+.eq-slot-fila1 .eq-slot-dates { color: #fbbf24; }
+.eq-slot-fila2 .eq-slot-dates { color: #fb923c; }
+
+/* ── Actions footer ── */
+.eq-actions {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  display: flex; gap: 6px;
+}
+.eq-btn {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 6px 10px; border-radius: 7px; font-size: 11px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border2); background: transparent;
+  color: var(--text2); transition: all .15s; font-family: var(--dm);
+}
+.eq-btn:hover { background: var(--surface2); color: var(--accent); border-color: var(--accent); }
+.eq-btn-danger:hover { background: rgba(255,107,107,.08); color: var(--coral); border-color: rgba(255,107,107,.3); }
+
+/* ── Empty state ── */
+.eq-empty {
+  text-align: center; padding: 64px 24px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+.eq-empty-icon {
+  width: 64px; height: 64px; border-radius: 16px;
+  background: var(--surface2); display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+}
+
+/* ── Fila modal slot sections ── */
+.fila-slot {
+  border-radius: 10px; overflow: hidden; margin-bottom: 10px;
+}
+.fila-slot-header {
+  padding: 8px 14px; font-size: 11px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 7px;
+}
+.fila-slot-body { padding: 12px 14px 14px; background: var(--surface); }
+.fila-slot-0 .fila-slot-header { background: #dcfce7; color: #15803d; }
+.fila-slot-1 .fila-slot-header { background: #fef3c7; color: #b45309; }
+.fila-slot-2 .fila-slot-header { background: #ffedd5; color: #c2410c; }
+.fila-slot-3 .fila-slot-header { background: #f1f5f9; color: #64748b; }
+.form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+/* ── Stats bar ── */
+.eq-stats {
+  display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+}
+.eq-stat-chip {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 16px;
+  display: flex; flex-direction: column; gap: 2px; min-width: 120px;
+}
+.eq-stat-num { font-family: var(--syne); font-size: 22px; font-weight: 800; letter-spacing: -1px; }
+.eq-stat-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .07em; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if messages %}
+<div class="messages-wrap">
+  {% for m in messages %}
+  <div class="alert alert-{{ m.tags }}">{{ m }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Stats bar -->
+{% with total=equipes|length %}
+<div class="eq-stats fade-up">
+  <div class="eq-stat-chip">
+    <div class="eq-stat-num">{{ total }}</div>
+    <div class="eq-stat-label">Equipes cadastradas</div>
+  </div>
+  <div class="eq-stat-chip">
+    <div class="eq-stat-num" style="color:var(--accent)">
+      {% with cnt=0 %}
+        {% for item in equipes %}{% if item.obj.is_active %}{% with cnt=cnt %}{% endwith %}{% endif %}{% endfor %}
+        {{ equipes|length }}
+      {% endwith %}
+    </div>
+    <div class="eq-stat-label">Ativas</div>
+  </div>
+  <div class="eq-stat-chip">
+    <div class="eq-stat-num" style="color:#22c55e">{{ em_campo_count }}</div>
+    <div class="eq-stat-label">Em campo agora</div>
+  </div>
+</div>
+{% endwith %}
+
+<!-- Cards grid -->
+{% if equipes %}
+<div class="eq-grid">
+{% for item in equipes %}
+<div class="eq-card fade-up" style="animation-delay:{{ forloop.counter0 }}00ms">
+
+  <!-- Header -->
+  <div class="eq-header" style="background: linear-gradient(135deg, {{ item.color }} 0%, {{ item.color }}cc 100%)">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:1;margin-bottom:10px">
+      <div style="display:flex;gap:8px">
+        <!-- Foto do técnico ou initials -->
+        {% if item.obj.foto %}
+        <img src="{{ item.obj.foto.url }}" alt="{{ item.obj.tecnico_display }}"
+             style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,0.3)">
+        {% elif item.obj.tecnico_user and item.obj.tecnico_user.photo %}
+        <img src="{{ item.obj.tecnico_user.photo.url }}" alt="{{ item.obj.tecnico_display }}"
+             style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,0.3)">
+        {% else %}
+        <div class="eq-initials" style="width:52px;height:52px;font-size:22px">{{ item.obj.tecnico|slice:":1" }}</div>
+        {% endif %}
+        <!-- Foto do auxiliar ou initials -->
+        {% if item.obj.auxiliar_display %}
+          {% if item.obj.foto_auxiliar %}
+          <img src="{{ item.obj.foto_auxiliar.url }}" alt="{{ item.obj.auxiliar_display }}"
+               style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,0.3)">
+          {% elif item.obj.auxiliar_user and item.obj.auxiliar_user.photo %}
+          <img src="{{ item.obj.auxiliar_user.photo.url }}" alt="{{ item.obj.auxiliar_display }}"
+               style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,0.3)">
+          {% else %}
+          <div class="eq-initials" style="width:52px;height:52px;font-size:22px">{{ item.obj.auxiliar_display|slice:":1" }}</div>
+          {% endif %}
+        {% endif %}
+      </div>
+      {% if item.obj.is_active %}
+      <span class="eq-status-badge eq-status-active">Ativa</span>
+      {% else %}
+      <span class="eq-status-badge eq-status-inactive">Inativa</span>
+      {% endif %}
+    </div>
+    <div style="position:relative;z-index:1">
+      <div class="eq-tecnico">{{ item.obj.tecnico_display }}</div>
+      <div class="eq-meta">
+        {% if item.obj.auxiliar_display %}
+        <span class="eq-chip">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          {{ item.obj.auxiliar_display }}
+        </span>
+        {% endif %}
+        {% if item.obj.veiculo %}
+        <span class="eq-chip">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          {{ item.obj.veiculo }}{% if item.obj.placa %} · {{ item.obj.placa }}{% endif %}
+        </span>
+        {% elif item.obj.placa %}
+        <span class="eq-chip">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          {{ item.obj.placa }}
+        </span>
+        {% endif %}
+        {% if item.obj.tecnico_user %}
+        <span class="eq-chip" style="background:rgba(255,255,255,0.22)">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.63 3.38 2 2 0 0 1 3.62 1.2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6.06 6.06l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92z"/></svg>
+          No sistema
+        </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Queue slots -->
+  <div class="eq-slots">
+
+    <!-- Atualmente -->
+    {% if item.slot_atual %}
+    <div class="eq-slot eq-slot-atual">
+      <div class="eq-slot-label">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Atualmente
+      </div>
+      <div class="eq-slot-name">{{ item.slot_atual.projeto.name|default:"—" }}</div>
+      <div class="eq-slot-sub">
+        {% if item.slot_atual.tipo_instalacao %}<span class="eq-tag">{{ item.slot_atual.tipo_instalacao }}</span>{% endif %}
+        {% if item.slot_atual.varejo_projeto %}<span class="eq-tag">{{ item.slot_atual.varejo_projeto }}</span>{% endif %}
+        {% if item.slot_atual.dias_execucao %}<span class="eq-tag">{{ item.slot_atual.dias_execucao }}</span>{% endif %}
+      </div>
+      {% if item.slot_atual.data_inicio or item.slot_atual.data_termino %}
+      <div class="eq-slot-dates">
+        {{ item.slot_atual.data_inicio|date:"d/m/Y"|default:"" }}{% if item.slot_atual.data_inicio and item.slot_atual.data_termino %} → {% endif %}{{ item.slot_atual.data_termino|date:"d/m/Y"|default:"" }}
+      </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="eq-slot eq-slot-empty">
+      <div class="eq-slot-label">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Atualmente
+      </div>
+      <div class="eq-slot-name">Sem projeto em execução</div>
+    </div>
+    {% endif %}
+
+    <!-- Fila 1 -->
+    {% if item.slot_fila1 %}
+    <div class="eq-slot eq-slot-fila1">
+      <div class="eq-slot-label">⏳ Fila 1</div>
+      <div class="eq-slot-name">{{ item.slot_fila1.projeto.name|default:"—" }}</div>
+      <div class="eq-slot-sub">
+        {% if item.slot_fila1.tipo_instalacao %}<span class="eq-tag">{{ item.slot_fila1.tipo_instalacao }}</span>{% endif %}
+        {% if item.slot_fila1.dias_execucao %}<span class="eq-tag">{{ item.slot_fila1.dias_execucao }}</span>{% endif %}
+      </div>
+      {% if item.slot_fila1.data_inicio or item.slot_fila1.data_termino %}
+      <div class="eq-slot-dates">
+        {{ item.slot_fila1.data_inicio|date:"d/m/Y"|default:"" }}{% if item.slot_fila1.data_inicio and item.slot_fila1.data_termino %} → {% endif %}{{ item.slot_fila1.data_termino|date:"d/m/Y"|default:"" }}
+      </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="eq-slot eq-slot-empty" style="padding:6px 11px">
+      <div class="eq-slot-label" style="color:var(--text3)">⏳ Fila 1 — <span style="font-weight:400;font-style:italic">vazio</span></div>
+    </div>
+    {% endif %}
+
+    <!-- Fila 2 -->
+    {% if item.slot_fila2 %}
+    <div class="eq-slot eq-slot-fila2">
+      <div class="eq-slot-label">⏳ Fila 2</div>
+      <div class="eq-slot-name">{{ item.slot_fila2.projeto.name|default:"—" }}</div>
+      <div class="eq-slot-sub">
+        {% if item.slot_fila2.tipo_instalacao %}<span class="eq-tag">{{ item.slot_fila2.tipo_instalacao }}</span>{% endif %}
+        {% if item.slot_fila2.dias_execucao %}<span class="eq-tag">{{ item.slot_fila2.dias_execucao }}</span>{% endif %}
+      </div>
+      {% if item.slot_fila2.data_inicio or item.slot_fila2.data_termino %}
+      <div class="eq-slot-dates">{{ item.slot_fila2.data_inicio|date:"d/m/Y"|default:"" }}{% if item.slot_fila2.data_inicio and item.slot_fila2.data_termino %} → {% endif %}{{ item.slot_fila2.data_termino|date:"d/m/Y"|default:"" }}</div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="eq-slot eq-slot-empty" style="padding:6px 11px">
+      <div class="eq-slot-label" style="color:var(--text3)">⏳ Fila 2 — <span style="font-weight:400;font-style:italic">vazio</span></div>
+    </div>
+    {% endif %}
+
+    <!-- Fila 3 -->
+    {% if item.slot_fila3 %}
+    <div class="eq-slot eq-slot-fila3">
+      <div class="eq-slot-label">⏳ Fila 3</div>
+      <div class="eq-slot-name">{{ item.slot_fila3.projeto.name|default:"—" }}</div>
+      <div class="eq-slot-sub">
+        {% if item.slot_fila3.tipo_instalacao %}<span class="eq-tag">{{ item.slot_fila3.tipo_instalacao }}</span>{% endif %}
+        {% if item.slot_fila3.dias_execucao %}<span class="eq-tag">{{ item.slot_fila3.dias_execucao }}</span>{% endif %}
+      </div>
+      {% if item.slot_fila3.data_inicio or item.slot_fila3.data_termino %}
+      <div class="eq-slot-dates">{{ item.slot_fila3.data_inicio|date:"d/m/Y"|default:"" }}{% if item.slot_fila3.data_inicio and item.slot_fila3.data_termino %} → {% endif %}{{ item.slot_fila3.data_termino|date:"d/m/Y"|default:"" }}</div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="eq-slot eq-slot-empty" style="padding:6px 11px">
+      <div class="eq-slot-label" style="color:var(--text3)">⏳ Fila 3 — <span style="font-weight:400;font-style:italic">vazio</span></div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Actions -->
+  <div class="eq-actions">
+    <button class="eq-btn"
+            data-pk="{{ item.obj.pk }}"
+            data-tecnico="{{ item.obj.tecnico|escapejs }}"
+            data-tecnico-user="{{ item.tecnico_user_id }}"
+            data-auxiliar="{{ item.obj.auxiliar|escapejs }}"
+            data-auxiliar-user="{{ item.auxiliar_user_id }}"
+            data-veiculo="{{ item.obj.veiculo|escapejs }}"
+            data-placa="{{ item.obj.placa|escapejs }}"
+            data-ordem="{{ item.obj.ordem }}"
+            data-active="{{ item.obj.is_active|yesno:'true,false' }}"
+            data-foto="{% if item.obj.foto %}{{ item.obj.foto.url }}{% endif %}"
+            data-foto-auxiliar="{% if item.obj.foto_auxiliar %}{{ item.obj.foto_auxiliar.url }}{% endif %}"
+            data-cidade="{{ item.obj.cidade }}"
+            onclick="openEditModalFromBtn(this)">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Editar
+    </button>
+    <button class="eq-btn eq-btn-fila"
+            data-id="{{ item.obj.pk }}"
+            data-name="{{ item.obj.tecnico|escapejs }}"
+            data-slots='{{ item.slots_json|safe }}'
+            onclick="openFilaModalFromBtn(this)">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      Gerenciar Fila
+    </button>
+    <button class="eq-btn eq-btn-danger" onclick="deleteEquipe('{{ item.obj.pk }}', '{{ item.obj.tecnico|escapejs }}')">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+    </button>
+  </div>
+</div>
+{% endfor %}
+</div>
+
+{% else %}
+<!-- Empty state -->
+<div class="card fade-up">
+  <div class="eq-empty">
+    <div class="eq-empty-icon">👷</div>
+    <div style="font-family:var(--syne);font-size:18px;font-weight:800;color:var(--text)">Nenhuma equipe cadastrada</div>
+    <div style="font-size:13px;color:var(--text3);max-width:320px;text-align:center">Cadastre as equipes técnicas para acompanhar quem está em campo e quais projetos estão na fila.</div>
+    <button class="btn btn-primary" onclick="openAddModal()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+      Cadastrar primeira equipe
+    </button>
+  </div>
+</div>
+{% endif %}
+
+
+<!-- ── Modal: Nova Equipe ──────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal-box" style="max-width:460px">
+    <div class="modal-header">
+      <div class="modal-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="margin-right:6px;vertical-align:middle"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Nova Equipe
+      </div>
+      <button class="modal-close" onclick="document.getElementById('add-modal').classList.remove('open')">✕</button>
+    </div>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add_equipe">
+      <input type="hidden" name="cidade_filter" value="{{ cidade_filter }}">
+
+      <div class="form-group">
+        <label class="form-label">Foto do Técnico</label>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div id="add-foto-preview" style="width:56px;height:56px;border-radius:12px;background:var(--surface2);border:2px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;overflow:hidden">📷</div>
+          <label style="flex:1;cursor:pointer">
+            <div class="form-control" style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text3)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span id="add-foto-label">Selecionar imagem...</span>
+            </div>
+            <input type="file" name="foto" id="add-foto" accept="image/*" style="display:none" onchange="previewFoto(this,'add-foto-preview','add-foto-label')">
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Técnico — usuário do sistema</label>
+        <select name="tecnico_user_id" id="add-tecnico-user" class="form-control" onchange="autoFillName(this,'add-tecnico')">
+          <option value="">— Selecionar usuário (opcional) —</option>
+          {% for u in all_users %}<option value="{{ u.pk }}" data-name="{{ u.get_full_name|default:u.username }}">{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+        </select>
+        <div class="form-hint">Vincula o técnico a uma conta do sistema para adicioná-lo automaticamente aos projetos.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nome de exibição do técnico *</label>
+        <input type="text" name="tecnico" id="add-tecnico" class="form-control" required placeholder="Ex: Thiago">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Auxiliar — usuário do sistema</label>
+        <select name="auxiliar_user_id" id="add-auxiliar-user" class="form-control" onchange="autoFillName(this,'add-auxiliar')">
+          <option value="">— Selecionar usuário (opcional) —</option>
+          {% for u in all_users %}<option value="{{ u.pk }}" data-name="{{ u.get_full_name|default:u.username }}">{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nome de exibição do auxiliar</label>
+        <input type="text" name="auxiliar" id="add-auxiliar" class="form-control" placeholder="Ex: Luan Christian">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Foto do Auxiliar</label>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div id="add-foto-auxiliar-preview" style="width:56px;height:56px;border-radius:12px;background:var(--surface2);border:2px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;overflow:hidden">📷</div>
+          <label style="flex:1;cursor:pointer">
+            <div class="form-control" style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text3)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span id="add-foto-auxiliar-label">Selecionar imagem...</span>
+            </div>
+            <input type="file" name="foto_auxiliar" id="add-foto-auxiliar" accept="image/*" style="display:none" onchange="previewFoto(this,'add-foto-auxiliar-preview','add-foto-auxiliar-label')">
+          </label>
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Veículo</label>
+          <input type="text" name="veiculo" class="form-control" placeholder="Ex: Polo">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Placa</label>
+          <input type="text" name="placa" class="form-control" placeholder="Ex: ABC1D23" maxlength="10" style="text-transform:uppercase">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ordem de exibição</label>
+          <input type="number" name="ordem" class="form-control" value="0" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cidade</label>
+          <select name="cidade" class="form-control">
+            <option value="">— Sem cidade —</option>
+            <option value="londrina">Londrina</option>
+            <option value="itu">Itu</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button type="submit" class="btn btn-primary" style="flex:1">Criar Equipe</button>
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('add-modal').classList.remove('open')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ── Modal: Editar Equipe ───────────────────────────────────────────────── -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal-box" style="max-width:460px">
+    <div class="modal-header">
+      <div class="modal-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="margin-right:6px;vertical-align:middle"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Editar Equipe
+      </div>
+      <button class="modal-close" onclick="document.getElementById('edit-modal').classList.remove('open')">✕</button>
+    </div>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="edit_equipe">
+      <input type="hidden" name="equipe_id" id="edit-equipe-id">
+      <input type="hidden" name="cidade_filter" value="{{ cidade_filter }}">
+
+      <div class="form-group">
+        <label class="form-label">Foto do Técnico</label>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div id="edit-foto-preview" style="width:56px;height:56px;border-radius:12px;background:var(--surface2);border:2px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;overflow:hidden">📷</div>
+          <label style="flex:1;cursor:pointer">
+            <div class="form-control" style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text3)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span id="edit-foto-label">Selecionar imagem...</span>
+            </div>
+            <input type="file" name="foto" id="edit-foto" accept="image/*" style="display:none" onchange="previewFoto(this,'edit-foto-preview','edit-foto-label')">
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Técnico — usuário do sistema</label>
+        <select name="tecnico_user_id" id="edit-tecnico-user" class="form-control" onchange="autoFillName(this,'edit-tecnico')">
+          <option value="">— Selecionar usuário (opcional) —</option>
+          {% for u in all_users %}<option value="{{ u.pk }}" data-name="{{ u.get_full_name|default:u.username }}">{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nome de exibição do técnico *</label>
+        <input type="text" name="tecnico" id="edit-tecnico" class="form-control" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Auxiliar — usuário do sistema</label>
+        <select name="auxiliar_user_id" id="edit-auxiliar-user" class="form-control" onchange="autoFillName(this,'edit-auxiliar')">
+          <option value="">— Selecionar usuário (opcional) —</option>
+          {% for u in all_users %}<option value="{{ u.pk }}" data-name="{{ u.get_full_name|default:u.username }}">{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nome de exibição do auxiliar</label>
+        <input type="text" name="auxiliar" id="edit-auxiliar" class="form-control">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Foto do Auxiliar</label>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div id="edit-foto-auxiliar-preview" style="width:56px;height:56px;border-radius:12px;background:var(--surface2);border:2px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;overflow:hidden">📷</div>
+          <label style="flex:1;cursor:pointer">
+            <div class="form-control" style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text3)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span id="edit-foto-auxiliar-label">Selecionar imagem...</span>
+            </div>
+            <input type="file" name="foto_auxiliar" id="edit-foto-auxiliar" accept="image/*" style="display:none" onchange="previewFoto(this,'edit-foto-auxiliar-preview','edit-foto-auxiliar-label')">
+          </label>
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Veículo</label>
+          <input type="text" name="veiculo" id="edit-veiculo" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Placa</label>
+          <input type="text" name="placa" id="edit-placa" class="form-control" maxlength="10" style="text-transform:uppercase">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ordem de exibição</label>
+          <input type="number" name="ordem" id="edit-ordem" class="form-control" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cidade</label>
+          <select name="cidade" id="edit-cidade" class="form-control">
+            <option value="">— Sem cidade —</option>
+            <option value="londrina">Londrina</option>
+            <option value="itu">Itu</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <div style="display:flex;gap:12px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="radio" name="is_active" value="1" id="edit-active-yes" style="accent-color:var(--accent)">
+            <span style="color:#059669;font-weight:600">Ativa</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="radio" name="is_active" value="0" id="edit-active-no" style="accent-color:#dc2626">
+            <span style="color:#dc2626;font-weight:600">Inativa</span>
+          </label>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button type="submit" class="btn btn-primary" style="flex:1">Salvar Alterações</button>
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('edit-modal').classList.remove('open')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ── Modal: Gerenciar Fila ─────────────────────────────────────────────── -->
+<div class="modal-overlay" id="fila-modal">
+  <div class="modal-box" style="max-width:600px">
+    <div class="modal-header">
+      <div class="modal-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="margin-right:6px;vertical-align:middle"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span id="fila-modal-title">Fila de Projetos</span>
+      </div>
+      <button class="modal-close" onclick="document.getElementById('fila-modal').classList.remove('open')">✕</button>
+    </div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:16px;margin-top:-10px">Deixe um slot em branco para removê-lo da fila.</p>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_fila">
+      <input type="hidden" name="equipe_id" id="fila-equipe-id">
+      <input type="hidden" name="cidade_filter" value="{{ cidade_filter }}">
+
+      {% for pos_data in "0123" %}
+      {% with pos=forloop.counter0 %}
+      <div class="fila-slot fila-slot-{{ pos }}">
+        <div class="fila-slot-header">
+          {% if pos == 0 %}
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Atualmente
+          {% elif pos == 1 %}⏳ Fila 1
+          {% elif pos == 2 %}⏳ Fila 2
+          {% else %}⏳ Fila 3{% endif %}
+        </div>
+        <div class="fila-slot-body">
+          <div class="form-group" style="margin-bottom:10px">
+            <label class="form-label">Projeto</label>
+            <select name="s{{ pos }}_projeto" id="s{{ pos }}_projeto" class="form-control">
+              <option value="">— Selecionar projeto —</option>
+              {% for p in all_projects %}
+              <option value="{{ p.pk }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-grid-2" style="margin-bottom:10px">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Tipo de Instalação</label>
+              <input type="text" name="s{{ pos }}_tipo" id="s{{ pos }}_tipo" class="form-control" placeholder="Ex: Retrofit, Instalação">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Varejo / Projeto</label>
+              <input type="text" name="s{{ pos }}_varejo" id="s{{ pos }}_varejo" class="form-control" placeholder="Ex: Varejo">
+            </div>
+          </div>
+          <div class="form-grid-3">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Dias de execução</label>
+              <input type="text" name="s{{ pos }}_dias" id="s{{ pos }}_dias" class="form-control" placeholder="Ex: 5 dias">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Data início</label>
+              <input type="date" name="s{{ pos }}_inicio" id="s{{ pos }}_inicio" class="form-control">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Data término</label>
+              <input type="date" name="s{{ pos }}_termino" id="s{{ pos }}_termino" class="form-control">
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endwith %}
+      {% endfor %}
+
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button type="submit" class="btn btn-primary" style="flex:1">Salvar Fila</button>
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('fila-modal').classList.remove('open')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Form oculto para delete ───────────────────────────────────────────── -->
+<form method="post" id="delete-form" style="display:none">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="delete_equipe">
+  <input type="hidden" name="equipe_id" id="delete-equipe-id">
+  <input type="hidden" name="cidade_filter" value="{{ cidade_filter }}">
+</form>
+
+
+<script>
+function openAddModal() {
+  document.getElementById('add-foto-preview').innerHTML = '📷';
+  document.getElementById('add-foto-label').textContent = 'Selecionar imagem...';
+  document.getElementById('add-foto').value = '';
+  document.getElementById('add-foto-auxiliar-preview').innerHTML = '📷';
+  document.getElementById('add-foto-auxiliar-label').textContent = 'Selecionar imagem...';
+  document.getElementById('add-foto-auxiliar').value = '';
+  document.getElementById('add-modal').classList.add('open');
+}
+
+function previewFoto(input, previewId, labelId) {
+  const preview = document.getElementById(previewId);
+  const label   = document.getElementById(labelId);
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      preview.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`;
+    };
+    reader.readAsDataURL(input.files[0]);
+    label.textContent = input.files[0].name;
+  }
+}
+
+function autoFillName(sel, targetId) {
+  const opt = sel.options[sel.selectedIndex];
+  const target = document.getElementById(targetId);
+  if (opt && opt.value && target && !target.value) {
+    target.value = opt.dataset.name || '';
+  }
+}
+
+function openEditModalFromBtn(btn) {
+  const isActive = btn.dataset.active === 'true';
+  const fotoUrl  = btn.dataset.foto;
+  const fotoAuxiliarUrl = btn.dataset.fotoAuxiliar;
+  const preview  = document.getElementById('edit-foto-preview');
+  const label    = document.getElementById('edit-foto-label');
+  const previewAux = document.getElementById('edit-foto-auxiliar-preview');
+  const labelAux   = document.getElementById('edit-foto-auxiliar-label');
+  document.getElementById('edit-equipe-id').value    = btn.dataset.pk;
+  document.getElementById('edit-tecnico').value      = btn.dataset.tecnico;
+  document.getElementById('edit-auxiliar').value     = btn.dataset.auxiliar;
+  document.getElementById('edit-veiculo').value      = btn.dataset.veiculo;
+  document.getElementById('edit-placa').value        = btn.dataset.placa;
+  document.getElementById('edit-ordem').value        = btn.dataset.ordem;
+  document.getElementById('edit-active-yes').checked = isActive;
+  document.getElementById('edit-active-no').checked  = !isActive;
+  document.getElementById('edit-foto').value         = '';
+  document.getElementById('edit-foto-auxiliar').value = '';
+  setSelectVal('edit-tecnico-user',  btn.dataset.tecnicoUser);
+  setSelectVal('edit-auxiliar-user', btn.dataset.auxiliarUser);
+  setSelectVal('edit-cidade', btn.dataset.cidade || '');
+  if (fotoUrl) {
+    preview.innerHTML = `<img src="${fotoUrl}" style="width:100%;height:100%;object-fit:cover">`;
+    label.textContent = 'Foto atual (selecionar para alterar)';
+  } else {
+    preview.innerHTML = '📷';
+    label.textContent = 'Selecionar imagem...';
+  }
+  if (fotoAuxiliarUrl) {
+    previewAux.innerHTML = `<img src="${fotoAuxiliarUrl}" style="width:100%;height:100%;object-fit:cover">`;
+    labelAux.textContent = 'Foto atual (selecionar para alterar)';
+  } else {
+    previewAux.innerHTML = '📷';
+    labelAux.textContent = 'Selecionar imagem...';
+  }
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function setSelectVal(id, val) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  sel.value = val || '';
+}
+
+function openFilaModalFromBtn(btn) {
+  const slots = JSON.parse(btn.dataset.slots);
+  openFilaModal(btn.dataset.id, btn.dataset.name, slots);
+}
+
+function openFilaModal(equipeId, equipeName, slots) {
+  document.getElementById('fila-equipe-id').value   = equipeId;
+  document.getElementById('fila-modal-title').textContent = 'Fila — ' + equipeName;
+
+  for (let pos = 0; pos < 4; pos++) {
+    const s = slots[pos] || {};
+    const sel = document.getElementById(`s${pos}_projeto`);
+    if (sel) sel.value = s.projeto_id || '';
+    setVal(`s${pos}_tipo`,    s.tipo    || '');
+    setVal(`s${pos}_varejo`,  s.varejo  || '');
+    setVal(`s${pos}_dias`,    s.dias    || '');
+    setVal(`s${pos}_inicio`,  s.inicio  || '');
+    setVal(`s${pos}_termino`, s.termino || '');
+  }
+
+  document.getElementById('fila-modal').classList.add('open');
+}
+
+function setVal(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.value = val;
+}
+
+function deleteEquipe(id, name) {
+  if (!confirm(`Excluir a equipe de ${name}? Todas as atribuições de fila serão removidas.`)) return;
+  document.getElementById('delete-equipe-id').value = id;
+  document.getElementById('delete-form').submit();
+}
+
+/* Fechar modal clicando fora */
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('open');
+  });
+});
+</script>
+{% endblock %}

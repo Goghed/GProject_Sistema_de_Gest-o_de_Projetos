@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Meu Perfil — G Project{% endblock %}
+{% block page_title %}Meu Perfil{% endblock %}
+{% block content %}
+<div style="max-width:500px">
+<form method="post">
+{% csrf_token %}
+<div class="card fade-up" style="margin-bottom:14px">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px">
+    <div class="avatar" style="width:52px;height:52px;background:{{ user.avatar_color }};font-size:18px;font-weight:800">{{ user.initials }}</div>
+    <div>
+      <div style="font-family:var(--syne);font-size:18px;font-weight:800">{{ user.get_full_name|default:user.username }}</div>
+      <div style="color:var(--text3);font-size:12px">{{ user.get_role_display }} · {{ user.email }}</div>
+    </div>
+  </div>
+  <div class="form-grid-2">
+    <div class="form-group">
+      <label class="form-label">Nome</label>
+      <input type="text" name="first_name" class="form-control" value="{{ user.first_name }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Sobrenome</label>
+      <input type="text" name="last_name" class="form-control" value="{{ user.last_name }}">
+    </div>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Cargo</label>
+    <input type="text" name="job_title" class="form-control" value="{{ user.job_title }}">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Bio</label>
+    <textarea name="bio" class="form-control" rows="3">{{ user.bio }}</textarea>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Cor do Avatar</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:5px">
+      {% for c in colors %}
+      <label style="cursor:pointer">
+        <input type="radio" name="avatar_color" value="{{ c }}"
+               {% if user.avatar_color == c %}checked{% endif %}
+               style="display:none">
+        <div style="width:26px;height:26px;border-radius:50%;background:{{ c }};cursor:pointer;
+                    border:{% if user.avatar_color == c %}3px solid white{% else %}2px solid transparent{% endif %};
+                    box-shadow:{% if user.avatar_color == c %}0 0 0 2px {{ c }}{% else %}none{% endif %}">
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+<button type="submit" class="btn btn-primary">Salvar Alterações</button>
+</form>
+</div>
+{% endblock %}

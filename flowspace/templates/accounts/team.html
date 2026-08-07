@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}Equipe — G Project{% endblock %}
+{% block page_title %}Equipe{% endblock %}
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="document.getElementById('invite-modal').classList.add('open')">+ Convidar Membro</button>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+.member-avatar {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #fff;
+  overflow: hidden; position: relative;
+}
+.member-avatar img {
+  width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
+}
+.edit-btn {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 10px; font-size: 11px; color: var(--text2); cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.edit-btn:hover { background: var(--surface2); color: var(--accent); border-color: var(--accent); }
+.delete-btn {
+  background: none; border: 1px solid rgba(220,38,38,.3); border-radius: 6px;
+  padding: 4px 10px; font-size: 11px; color: #dc2626; cursor: pointer;
+  transition: background .15s;
+}
+.delete-btn:hover { background: rgba(220,38,38,.08); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card fade-up" style="overflow:hidden;padding:0">
+  <table class="table" style="margin:0">
+    <thead>
+      <tr>
+        <th style="padding-left:20px">Membro</th>
+        <th>Cargo</th>
+        <th>Função</th>
+        <th>Projetos</th>
+        <th>Status</th>
+        <th>Função</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for u in team_users %}
+    <tr>
+      <!-- Avatar + info -->
+      <td style="padding-left:20px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="member-avatar" style="background:{{ u.avatar_color }}">
+            {% if u.photo %}
+              <img src="{{ u.photo.url }}" alt="{{ u.initials }}">
+            {% else %}
+              {{ u.initials }}
+            {% endif %}
+          </div>
+          <div>
+            <div style="font-weight:600;font-size:13px">{{ u.get_full_name|default:u.username }}</div>
+            <div style="font-size:11px;color:var(--text3)">{{ u.email }}</div>
+          </div>
+        </div>
+      </td>
+
+      <!-- Cargo -->
+      <td style="font-size:12px;color:var(--text2)">{{ u.job_title|default:"—" }}</td>
+
+      <!-- Função (badge) -->
+      <td><span class="badge badge-medium">{{ u.get_role_display }}</span></td>
+
+      <!-- Projetos -->
+      <td style="font-size:12px;color:var(--text2)">{{ u.projects.count }}</td>
+
+      <!-- Status -->
+      <td>
+        {% if u.is_active %}
+          <span class="badge badge-active">Ativo</span>
+        {% else %}
+          <span class="badge" style="background:rgba(220,38,38,.1);color:#dc2626;border:1px solid rgba(220,38,38,.2)">Inativo</span>
+        {% endif %}
+      </td>
+
+      <!-- Mudar função rápida -->
+      <td>
+        {% if request.user.can_manage %}
+        <form method="post" style="display:inline">{% csrf_token %}
+          <input type="hidden" name="action" value="change_role">
+          <input type="hidden" name="user_id" value="{{ u.id }}">
+          <select name="role" onchange="this.form.submit()" class="form-control" style="padding:3px 6px;font-size:11px;width:auto">
+            <option value="owner"   {% if u.role == 'owner'   %}selected{% endif %}>Proprietário</option>
+            <option value="admin"   {% if u.role == 'admin'   %}selected{% endif %}>Admin</option>
+            <option value="manager" {% if u.role == 'manager' %}selected{% endif %}>Gerente</option>
+            <option value="member"  {% if u.role == 'member'  %}selected{% endif %}>Membro</option>
+            <option value="guest"   {% if u.role == 'guest'   %}selected{% endif %}>Convidado</option>
+          </select>
+        </form>
+        {% endif %}
+      </td>
+
+      <!-- Editar / Excluir -->
+      <td>
+        <div style="display:flex;gap:6px">
+        {% if request.user.can_manage %}
+        <button class="edit-btn" onclick="openEdit(
+          '{{ u.id }}',
+          '{{ u.first_name|escapejs }}',
+          '{{ u.last_name|escapejs }}',
+          '{{ u.email|escapejs }}',
+          '{{ u.job_title|escapejs }}',
+          {{ u.is_active|yesno:'true,false' }},
+          '{{ u.get_full_name|default:u.username|escapejs }}',
+          {% if u.id == request.user.id %}true{% else %}false{% endif %}
+        )">✏ Editar</button>
+        {% endif %}
+        {% if u.id != request.user.id %}
+          {% if request.user.role == "owner" or request.user.role == "admin" %}
+          <form method="post" onsubmit="return confirm('Excluir {{ u.get_full_name|default:u.username|escapejs }} definitivamente? Essa ação não pode ser desfeita.');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="delete_member">
+            <input type="hidden" name="user_id" value="{{ u.id }}">
+            <button type="submit" class="delete-btn">🗑 Excluir</button>
+          </form>
+          {% endif %}
+        {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ── Modal: Convidar Membro ─────────────────────────────────────────────── -->
+<div class="modal-overlay" id="invite-modal">
+  <div class="modal-box" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title">Convidar Membro</div>
+      <button class="modal-close" onclick="document.getElementById('invite-modal').classList.remove('open')">✕</button>
+    </div>
+    <form method="post">{% csrf_token %}
+      <input type="hidden" name="action" value="invite">
+      <div class="form-grid-2">
+        <div class="form-group"><label class="form-label">Nome</label><input type="text" name="first_name" class="form-control" required placeholder="Ex: Ed"></div>
+        <div class="form-group"><label class="form-label">Sobrenome</label><input type="text" name="last_name" class="form-control" required placeholder="Ex: Carlos"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Username</label><input type="text" name="username" class="form-control" required placeholder="Ex: ed.carlos"></div>
+      <div class="form-group"><label class="form-label">Email</label><input type="email" name="email" class="form-control" required></div>
+      <div class="form-group"><label class="form-label">Cargo</label><input type="text" name="job_title" class="form-control" placeholder="Ex: Técnico de Segurança"></div>
+      <div class="form-group"><label class="form-label">Função</label>
+        <select name="role" class="form-control">
+          <option value="admin">Administrador</option>
+          <option value="manager">Gerente (Gestor)</option>
+          <option value="member" selected>Membro</option>
+          <option value="guest">Convidado</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button type="submit" class="btn btn-primary" style="flex:1">Criar Usuário</button>
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('invite-modal').classList.remove('open')">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Modal: Editar Membro ───────────────────────────────────────────────── -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal-box" style="max-width:460px">
+    <div class="modal-header">
+      <div class="modal-title">✏ Editar Membro</div>
+      <button class="modal-close" onclick="document.getElementById('edit-modal').classList.remove('open')">✕</button>
+    </div>
+    <form method="post" id="edit-form">{% csrf_token %}
+      <input type="hidden" name="action" value="edit_member">
+      <input type="hidden" name="user_id" id="edit-user-id">
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Nome</label>
+          <input type="text" name="first_name" id="edit-first-name" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Sobrenome</label>
+          <input type="text" name="last_name" id="edit-last-name" class="form-control">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" name="email" id="edit-email" class="form-control" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cargo / Job Title</label>
+        <input type="text" name="job_title" id="edit-job-title" class="form-control" placeholder="Ex: Analista de Segurança">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <div style="display:flex;gap:10px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="radio" name="is_active" value="1" id="edit-active-yes" style="accent-color:var(--accent)">
+            <span style="color:#059669;font-weight:600">Ativo</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="radio" name="is_active" value="0" id="edit-active-no" style="accent-color:#dc2626">
+            <span style="color:#dc2626;font-weight:600">Inativo</span>
+          </label>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button type="submit" class="btn btn-primary" style="flex:1">Salvar Alterações</button>
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('edit-modal').classList.remove('open')">Cancelar</button>
+      </div>
+    </form>
+
+    {% if request.user.role == "owner" or request.user.role == "admin" %}
+    <div id="reset-password-block" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <button type="button" class="edit-btn" style="width:100%;justify-content:center;color:#b45309;border-color:rgba(180,83,9,.3)" onclick="resetPassword()">
+        🔑 Resetar Senha
+      </button>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;text-align:center">
+        Gera uma senha temporária e exige a troca no próximo acesso.
+      </div>
+    </div>
+    <form method="post" id="reset-password-form" style="display:none">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="reset_password">
+      <input type="hidden" name="user_id" id="reset-password-user-id">
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+let currentEditName = '';
+
+function openEdit(id, firstName, lastName, email, jobTitle, isActive, fullName, isSelf) {
+  document.getElementById('edit-user-id').value    = id;
+  document.getElementById('edit-first-name').value = firstName;
+  document.getElementById('edit-last-name').value  = lastName;
+  document.getElementById('edit-email').value      = email;
+  document.getElementById('edit-job-title').value  = jobTitle;
+  document.getElementById('edit-active-yes').checked = isActive;
+  document.getElementById('edit-active-no').checked  = !isActive;
+  currentEditName = fullName;
+  const resetBlock = document.getElementById('reset-password-block');
+  if (resetBlock) {
+    resetBlock.style.display = isSelf ? 'none' : '';
+    document.getElementById('reset-password-user-id').value = id;
+  }
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function resetPassword() {
+  if (!confirm(`Resetar a senha de ${currentEditName}? Uma nova senha temporária será gerada e ele(a) precisará trocá-la no próximo acesso.`)) return;
+  document.getElementById('reset-password-form').submit();
+}
+</script>
+{% endblock %}

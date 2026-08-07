@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Minhas Tarefas — G Project{% endblock %}
+{% block page_title %}Minhas Tarefas{% endblock %}
+
+{% block extra_head %}
+<style>
+.stat-chips { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.stat-chip {
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 14px; border-radius: 20px; border: 1.5px solid var(--border2);
+  background: var(--white); font-size: 12px; font-weight: 600; color: var(--text2);
+  text-decoration: none; cursor: pointer; transition: all .15s;
+}
+.stat-chip:hover  { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+.stat-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.stat-chip .num   { font-family: var(--syne); font-size: 15px; font-weight: 800; }
+.stat-chip.overdue.active   { background: var(--coral); border-color: var(--coral); }
+.stat-chip.overdue:not(.active) .num { color: var(--coral); }
+.stat-chip.blocked.active   { background: #dc2626; border-color: #dc2626; }
+.stat-chip.blocked:not(.active) .num { color: #dc2626; }
+.stat-chip.done.active      { background: var(--green); border-color: var(--green); }
+.stat-chip.done:not(.active) .num { color: var(--green); }
+
+.filter-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.scope-pills { display: flex; background: var(--surface2); padding: 3px; border-radius: 9px; gap: 2px; }
+.spill {
+  padding: 5px 13px; border-radius: 7px; font-size: 12px; font-weight: 500;
+  color: var(--text3); cursor: pointer; transition: all .14s; text-decoration: none;
+}
+.spill:hover { color: var(--text2); text-decoration: none; }
+.spill.active { background: var(--white); color: var(--accent); box-shadow: 0 1px 5px rgba(91,76,245,.15); }
+
+.prio-select {
+  padding: 6px 10px; border-radius: var(--radius); border: 1px solid var(--border2);
+  background: var(--white); color: var(--text); font-size: 12px; font-family: var(--dm);
+  cursor: pointer; outline: none;
+}
+
+.task-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  transition: background .12s; cursor: pointer; text-decoration: none;
+  color: inherit;
+}
+.task-row:hover { background: rgba(91,76,245,.02); text-decoration: none; color: inherit; }
+.task-row:last-child { border-bottom: none; }
+
+.task-status-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.task-title { font-size: 13px; font-weight: 600; color: var(--text); flex: 1; }
+.task-project { font-size: 11px; color: var(--text3); }
+.task-due { font-size: 11px; color: var(--text3); white-space: nowrap; }
+.task-due.overdue { color: var(--coral); font-weight: 600; }
+.task-blocked-ico { font-size: 14px; }
+
+.status-colors {
+  backlog: var(--text3); todo: var(--accent3); in_progress: var(--sky);
+  review: var(--amber); done: var(--green); archived: var(--text3);
+}
+
+.empty-state { text-align: center; padding: 60px 24px; color: var(--text3); }
+.empty-state-ico { font-size: 42px; margin-bottom: 14px; }
+.empty-state-title { font-family: var(--syne); font-size: 16px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+{% if user.can_manage %}
+<div class="scope-pills">
+  <a href="?scope=mine{% if status %}&status={{ status }}{% endif %}" class="spill {% if scope == 'mine' %}active{% endif %}">Minhas</a>
+  <a href="?scope=all{% if status %}&status={{ status }}{% endif %}"  class="spill {% if scope == 'all' %}active{% endif %}">Todas</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<!-- Stat chips -->
+<div class="stat-chips">
+  <a href="?scope={{ scope }}" class="stat-chip {% if not status %}active{% endif %}">
+    <span class="num">{{ counts.mine_active }}</span> Ativas
+  </a>
+  <a href="?scope={{ scope }}&status=overdue" class="stat-chip overdue {% if status == 'overdue' %}active{% endif %}">
+    <span class="num">{{ counts.overdue }}</span> Atrasadas
+  </a>
+  <a href="?scope={{ scope }}&status=blocked" class="stat-chip blocked {% if status == 'blocked' %}active{% endif %}">
+    <span class="num">{{ counts.blocked }}</span> Bloqueadas
+  </a>
+  <a href="?scope={{ scope }}&status=done" class="stat-chip done {% if status == 'done' %}active{% endif %}">
+    <span class="num">{{ counts.done }}</span> Concluídas
+  </a>
+</div>
+
+<!-- Filtros adicionais -->
+<div class="filter-bar">
+  <span style="font-size:12px;color:var(--text3);font-weight:600">Status:</span>
+  <select class="prio-select" onchange="applyPriority(this.value)">
+    <option value="">Qualquer prioridade</option>
+    <option value="urgent" {% if priority == 'urgent' %}selected{% endif %}>🔴 Urgente</option>
+    <option value="high"   {% if priority == 'high'   %}selected{% endif %}>🟠 Alta</option>
+    <option value="medium" {% if priority == 'medium' %}selected{% endif %}>🔵 Média</option>
+    <option value="low"    {% if priority == 'low'    %}selected{% endif %}>🟢 Baixa</option>
+  </select>
+</div>
+
+<!-- Tabela de tarefas -->
+<div class="card fade-up" style="padding:0;overflow:hidden">
+  {% if tasks %}
+  {% for task in tasks %}
+  <a href="/tasks/{{ task.pk }}/" class="task-row">
+    <!-- Status dot -->
+    <div class="task-status-dot" style="background:
+      {% if task.status == 'done' %}var(--green)
+      {% elif task.status == 'in_progress' %}var(--sky)
+      {% elif task.status == 'review' %}var(--amber)
+      {% elif task.status == 'todo' %}var(--accent3)
+      {% else %}var(--text3){% endif %}">
+    </div>
+
+    <!-- Blocked -->
+    {% if task.is_blocked %}<span class="task-blocked-ico" title="Bloqueada">🔒</span>{% endif %}
+
+    <!-- Title + project -->
+    <div style="flex:1;min-width:0">
+      <div class="task-title" style="{% if task.status == 'done' %}text-decoration:line-through;color:var(--text3){% endif %}">
+        {{ task.title }}
+      </div>
+      <div class="task-project">{{ task.project.name }}{% if task.column %} · {{ task.column.name }}{% endif %}</div>
+    </div>
+
+    <!-- Priority -->
+    <span class="badge badge-{{ task.priority }}">{{ task.get_priority_display }}</span>
+
+    <!-- Assignees -->
+    <div style="display:flex;gap:-4px">
+      {% for a in task.assignees.all|slice:":3" %}
+      <div class="avatar" style="background:{{ a.avatar_color }};border:2px solid var(--white);margin-left:-6px" title="{{ a }}">{{ a.initials }}</div>
+      {% endfor %}
+    </div>
+
+    <!-- Due date -->
+    {% if task.due_date %}
+    <div class="task-due {% if task.due_date < today and task.status != 'done' %}overdue{% endif %}">
+      {% if task.due_date < today and task.status != 'done' %}⚠ {% endif %}{{ task.due_date|date:"d/m/Y" }}
+    </div>
+    {% endif %}
+
+    <!-- Daily report link -->
+    {% if task.start_date and task.duration_days %}
+    <a href="/tasks/{{ task.pk }}/daily-report/"
+       onclick="event.stopPropagation()"
+       class="btn btn-ghost btn-sm" title="Relatório Diário">📋</a>
+    {% endif %}
+  </a>
+  {% endfor %}
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-ico">✅</div>
+    <div class="empty-state-title">Nenhuma tarefa encontrada</div>
+    <div style="font-size:13px;margin-top:4px">Tente mudar os filtros ou aguarde novas atribuições.</div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function applyPriority(val) {
+  const url = new URL(window.location.href);
+  if (val) url.searchParams.set('priority', val);
+  else url.searchParams.delete('priority');
+  window.location.href = url.toString();
+}
+</script>
+{% endblock %}
