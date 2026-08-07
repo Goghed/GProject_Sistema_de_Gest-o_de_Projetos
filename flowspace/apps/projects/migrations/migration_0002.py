@@ -1,6 +1,5 @@
-import django.db.models.deletion
 from django.conf import settings
-from django.db import migrations, models
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
@@ -10,15 +9,7 @@ class Migration(migrations.Migration):
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
-    operations = [
-        migrations.AddField(
-            model_name='project',
-            name='manager',
-            field=models.ForeignKey(
-                blank=True, null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
-                related_name='managed_projects',
-                to=settings.AUTH_USER_MODEL,
-            ),
-        ),
-    ]
+    # 0001_initial already creates the `manager` field (added there after this
+    # migration was written) — kept as a no-op so the dependency graph and
+    # already-applied databases stay intact, without re-adding the column.
+    operations = []

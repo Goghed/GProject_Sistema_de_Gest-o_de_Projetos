@@ -1,4 +1,4 @@
-from django.db import migrations, models
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
@@ -7,20 +7,7 @@ class Migration(migrations.Migration):
         ('tasks', '0001_initial'),
     ]
 
-    operations = [
-        migrations.AddField(
-            model_name='task',
-            name='needs_review',
-            field=models.BooleanField(default=False, help_text='Precisa passar por revisão antes de concluir'),
-        ),
-        migrations.AddField(
-            model_name='task',
-            name='started_at',
-            field=models.DateTimeField(blank=True, null=True, help_text='Quando a tarefa foi iniciada'),
-        ),
-        migrations.AddField(
-            model_name='task',
-            name='deadline_days',
-            field=models.PositiveIntegerField(blank=True, null=True, help_text='Prazo estimado em dias úteis'),
-        ),
-    ]
+    # 0001_initial already creates needs_review/started_at/deadline_days
+    # (added there after this migration was written) — kept as a no-op so the
+    # dependency graph and already-applied databases stay intact.
+    operations = []
