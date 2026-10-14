@@ -50,12 +50,13 @@ def dashboard(request):
     projects  = Project.objects.all().prefetch_related("tasks","members")
     if cidade_filter:
         projects = projects.filter(cidade=cidade_filter)
-    active    = projects.filter(status__in=["active","on_hold"])
+    active       = projects.filter(status__in=["active","on_hold"])
+    non_archived = projects.exclude(status="archived")
     all_tasks = Task.objects.filter(project__in=active).exclude(status="archived")
     stats = {
         "projects":   active.count(),
         "open_tasks": all_tasks.exclude(status__in=["done","archived"]).count(),
-        "done_tasks": all_tasks.filter(status="done").count(),
+        "done_tasks": Task.objects.filter(project__in=non_archived, status="done").count(),
         "overdue":    all_tasks.filter(due_date__lt=today).exclude(status__in=["done","archived"]).count(),
     }
     recent_tasks = all_tasks.exclude(status__in=["done","archived"]).order_by("-updated_at")[:8]
@@ -668,6 +669,9 @@ def dashboard_stats_json(request):
     active = Project.objects.filter(status__in=["active", "on_hold"])
     if cidade_filter:
         active = active.filter(cidade=cidade_filter)
+    non_archived = Project.objects.exclude(status="archived")
+    if cidade_filter:
+        non_archived = non_archived.filter(cidade=cidade_filter)
     all_tasks = Task.objects.filter(project__in=active).exclude(status="archived")
     recent = (
         all_tasks.exclude(status__in=["done", "archived"])
@@ -692,7 +696,7 @@ def dashboard_stats_json(request):
     resp = JsonResponse({
         "projects":   active.count(),
         "open_tasks": all_tasks.exclude(status__in=["done", "archived"]).count(),
-        "done_tasks": all_tasks.filter(status="done").count(),
+        "done_tasks": Task.objects.filter(project__in=non_archived, status="done").count(),
         "overdue":    all_tasks.filter(due_date__lt=today).exclude(status__in=["done", "archived"]).count(),
         "tasks":      tasks_data,
     })
@@ -829,7 +833,7 @@ def insights(request):
             "total":     ptasks,
             "done":      pdone,
             "blocked":   pblocked,
-            "progress":  proj.progress,
+            "progress":  round(pdone / ptasks * 100) if ptasks else 0,
             "avg_delta": pavg,
             "on_time_pct": pontime,
             "avg_exec_days": pavg_exec,
@@ -948,6 +952,7 @@ def project_report(request, pk):
     # Estatísticas gerais
     total      = tasks.count()
     done       = tasks.filter(status="done").count()
+    progress   = round(done / total * 100) if total else 0
     blocked    = tasks.filter(is_blocked=True).count()
     with_days  = [t for t in tasks if t.duration_days]
 
@@ -961,6 +966,7 @@ def project_report(request, pk):
         "tasks":                 tasks,
         "total":                 total,
         "done":                  done,
+        "progress":              progress,
         "blocked":               blocked,
         "with_days":             with_days,
         "total_planned_days":    total_planned_days,

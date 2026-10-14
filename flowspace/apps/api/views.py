@@ -115,11 +115,13 @@ def dashboard_view(request):
         members=user,
         status__in=["active", "on_hold"]
     )
+    non_archived_projects = Project.objects.filter(members=user).exclude(status="archived")
 
-    # "Minhas Tarefas" e "Concluídas" = apenas tarefas atribuídas ao usuário
+    # "Minhas Tarefas" = apenas tarefas atribuídas ao usuário em projetos ativos
     my_scope   = Task.objects.filter(project__in=projects, assignees=user).exclude(status="archived")
     open_tasks = my_scope.exclude(status="done")
-    done_tasks = my_scope.filter(status="done")
+    # "Concluídas" não pode usar `projects` (active/on_hold) — senão some ao marcar o projeto como completed
+    done_tasks = Task.objects.filter(project__in=non_archived_projects, assignees=user, status="done")
 
     # "Em Atraso" = role-aware, igual ao web (managers veem todo o projeto)
     is_manager = user.role in ("owner", "admin", "manager")
@@ -330,6 +332,9 @@ def task_update(request, pk):
     for field in ("title","description","priority","status","tags","progress"):
         if field in request.data:
             setattr(task, field, request.data[field])
+
+    if "status" in request.data and task.status == "done" and not task.completed_at:
+        task.completed_at = timezone.now()
 
     if "due_date" in request.data:
         task.due_date = request.data["due_date"] or None

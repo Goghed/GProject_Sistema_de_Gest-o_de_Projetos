@@ -155,6 +155,8 @@ def task_update(request, pk):
                   "work_saturday", "work_sunday"):
         if field in data:
             setattr(task, field, data[field])
+    if "status" in data and task.status == "done" and not task.completed_at:
+        task.completed_at = timezone.now()
     if "due_date" in data:
         task.due_date = data["due_date"] or None
     if "start_date" in data:

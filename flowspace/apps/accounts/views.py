@@ -4,9 +4,11 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.password_validation import validate_password
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
+from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 from apps.common.uploads import validate_image_upload
 from .models import User
 
@@ -181,24 +183,6 @@ def team_view(request):
                 name = target.get_full_name() or target.username
                 target.delete()
                 messages.success(request, f"Usuário {name} excluído. Projetos e tarefas dele foram preservados (sem responsável).")
-        elif action == "reset_password":
-            uid    = request.POST.get("user_id")
-            target = User.objects.filter(id=uid).first()
-            if request.user.role not in ("owner", "admin"):
-                messages.error(request, "Apenas o proprietário ou administradores podem resetar senhas.")
-            elif not target:
-                messages.error(request, "Usuário não encontrado.")
-            elif str(target.id) == str(request.user.id):
-                messages.error(request, "Para trocar sua própria senha, use a página de Perfil.")
-            elif target.role == "owner" and request.user.role != "owner":
-                messages.error(request, "Apenas o proprietário pode resetar a senha de outro proprietário.")
-            else:
-                new_pwd = User.objects.make_random_password()
-                target.set_password(new_pwd)
-                target.must_change_password = True
-                target.save(update_fields=["password", "must_change_password"])
-                name = target.get_full_name() or target.username
-                messages.success(request, f"Senha de {name} resetada! Nova senha temporária: {new_pwd} (será exigida a troca no próximo acesso).")
         elif action == "edit_member":
             uid        = request.POST.get("user_id")
             first_name = request.POST.get("first_name", "").strip()
@@ -219,3 +203,22 @@ def team_view(request):
                 messages.error(request, "Usuário não encontrado.")
     users = User.objects.all().order_by("role", "first_name")
     return render(request, "accounts/team.html", {"team_users": users})
+
+
+@login_required
+@require_POST
+def reset_member_password(request):
+    if request.user.role not in ("owner", "admin"):
+        return JsonResponse({"ok": False, "error": "Apenas o proprietário ou administradores podem resetar senhas."}, status=403)
+    target = User.objects.filter(id=request.POST.get("user_id")).first()
+    if not target:
+        return JsonResponse({"ok": False, "error": "Usuário não encontrado."}, status=404)
+    if str(target.id) == str(request.user.id):
+        return JsonResponse({"ok": False, "error": "Para trocar sua própria senha, use a página de Perfil."}, status=400)
+    if target.role == "owner" and request.user.role != "owner":
+        return JsonResponse({"ok": False, "error": "Apenas o proprietário pode resetar a senha de outro proprietário."}, status=403)
+    new_pwd = User.objects.make_random_password()
+    target.set_password(new_pwd)
+    target.must_change_password = True
+    target.save(update_fields=["password", "must_change_password"])
+    return JsonResponse({"ok": True, "password": new_pwd})

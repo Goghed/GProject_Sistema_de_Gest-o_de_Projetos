@@ -187,6 +187,9 @@ body.dark-mode .form-control { background:var(--surface2); color:var(--text); bo
 .badge-review  { background: rgba(56,189,248,0.12);  color: #0284c7; }
 .badge-in_progress { background: rgba(91,76,245,0.10); color: #5b4cf5; }
 .badge-backlog { background: rgba(136,136,170,0.12); color: #7777aa; }
+.badge-todo    { background: rgba(168,157,247,0.15); color: #7c6ffa; }
+.badge-completed { background: rgba(52,211,153,0.12); color: #059669; }
+.badge-archived  { background: rgba(136,136,170,0.12); color: #7777aa; }
 
 /* ── Alerts ── */
 .messages-wrap { margin-bottom: 14px; }
@@ -247,6 +250,39 @@ body.dark-mode .form-control { background:var(--surface2); color:var(--text); bo
 /* Section titles */
 .section-title { font-family:var(--syne);font-size:15px;font-weight:800;color:var(--text);letter-spacing:-0.3px; }
 .section-row { display:flex;align-items:center;justify-content:space-between;margin-bottom:16px; }
+
+/* ── Hamburger (mobile only) ── */
+.hamburger {
+  display: none; width: 34px; height: 34px; flex-shrink: 0;
+  background: transparent; border: 1px solid var(--border2); border-radius: 8px;
+  cursor: pointer; align-items: center; justify-content: center; color: var(--text2);
+}
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(10,10,20,0.5);
+  z-index: 290;
+}
+.sidebar-overlay.open { display: block; }
+
+/* ── Mobile layout ── */
+@media (max-width: 768px) {
+  .hamburger { display: flex; }
+  .sidebar {
+    position: fixed; inset: 0 auto 0 0; width: 250px; height: 100vh;
+    transform: translateX(-100%); transition: transform .25s ease; z-index: 300;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .shell { height: 100vh; }
+  .main { width: 100%; }
+  .topbar {
+    flex-wrap: wrap; height: auto; min-height: 56px;
+    padding: 10px 14px; row-gap: 8px;
+  }
+  .topbar-right { margin-left: 0; width: 100%; flex-wrap: wrap; }
+  .page-body { padding: 14px; }
+  .form-grid-2 { grid-template-columns: 1fr; }
+  .modal-box { padding: 18px; }
+  *[style*="overflow-x:auto"] { -webkit-overflow-scrolling: touch; }
+}
 </style>
 {% block extra_head %}{% endblock %}
 </head>
@@ -309,10 +345,14 @@ body.dark-mode .form-control { background:var(--surface2); color:var(--text); bo
       <a href="{% url 'accounts:logout' %}" class="sb-logout" title="Sair">⏻</a>
     </div>
   </aside>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
   <!-- Main -->
   <div class="main">
     <div class="topbar">
+      <button class="hamburger" id="hamburger-btn" aria-label="Abrir menu" title="Menu">
+        <svg width="17" height="17" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4.5h13M2 8.5h13M2 12.5h13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
       {% block topbar_left %}
       <div class="topbar-title">{% block page_title %}FlowSpace{% endblock %}</div>
       {% endblock %}
@@ -335,6 +375,39 @@ body.dark-mode .form-control { background:var(--surface2); color:var(--text); bo
 </div>
 
 <script>
+// ── Mobile sidebar drawer ─────────────────────────────────────────────────────
+(function() {
+  const sidebar   = document.querySelector('.sidebar');
+  const overlay   = document.getElementById('sidebar-overlay');
+  const hamburger = document.getElementById('hamburger-btn');
+  if (!sidebar || !overlay || !hamburger) return;
+
+  function openSidebar()  { sidebar.classList.add('open'); overlay.classList.add('open'); }
+  function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('open'); }
+
+  hamburger.addEventListener('click', openSidebar);
+  overlay.addEventListener('click', closeSidebar);
+  sidebar.querySelectorAll('.sb-item, .sb-proj').forEach(function(el) {
+    el.addEventListener('click', closeSidebar);
+  });
+  window.addEventListener('resize', function() {
+    if (window.innerWidth > 768) closeSidebar();
+  });
+})();
+
+// ── Make plain tables scrollable on narrow screens ────────────────────────────
+(function() {
+  document.querySelectorAll('table.table').forEach(function(table) {
+    if (table.parentElement && table.parentElement.classList.contains('table-scroll')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'table-scroll';
+    wrap.style.overflowX = 'auto';
+    wrap.style.webkitOverflowScrolling = 'touch';
+    table.parentNode.insertBefore(wrap, table);
+    wrap.appendChild(table);
+  });
+})();
+
 // Dark mode
 function toggleDark() {
   const on = document.body.classList.toggle('dark-mode');

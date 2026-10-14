@@ -5,6 +5,7 @@
 {% block extra_head %}
 <style>
 .create-layout { display: grid; grid-template-columns: 1fr 360px; gap: 20px; max-width: 1000px; margin: 0 auto; }
+@media (max-width: 768px) { .create-layout { grid-template-columns: 1fr; } }
 
 /* Seção */
 .section-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 16px; overflow: hidden; }

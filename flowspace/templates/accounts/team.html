@@ -219,24 +219,31 @@
 
     {% if request.user.role == "owner" or request.user.role == "admin" %}
     <div id="reset-password-block" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-      <button type="button" class="edit-btn" style="width:100%;justify-content:center;color:#b45309;border-color:rgba(180,83,9,.3)" onclick="resetPassword()">
+      <button type="button" class="edit-btn" id="reset-password-btn" style="width:100%;justify-content:center;color:#b45309;border-color:rgba(180,83,9,.3)" onclick="resetPassword()">
         🔑 Resetar Senha
       </button>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px;text-align:center">
+      <div id="reset-password-hint" style="font-size:11px;color:var(--text3);margin-top:6px;text-align:center">
         Gera uma senha temporária e exige a troca no próximo acesso.
       </div>
+      <div id="reset-password-result" style="display:none;margin-top:8px">
+        <label class="form-label" style="color:#b45309">Nova senha temporária</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="reset-password-value" class="form-control" readonly
+                 style="font-family:monospace;font-weight:700;letter-spacing:.03em;background:#fffbeb;border-color:rgba(180,83,9,.3)">
+          <button type="button" class="edit-btn" onclick="copyResetPassword()" style="flex-shrink:0">Copiar</button>
+        </div>
+        <div style="font-size:11px;color:#b45309;margin-top:6px">
+          ⚠ Mostrada apenas uma vez nesta tela — anote ou copie agora e repasse com segurança.
+        </div>
+      </div>
     </div>
-    <form method="post" id="reset-password-form" style="display:none">
-      {% csrf_token %}
-      <input type="hidden" name="action" value="reset_password">
-      <input type="hidden" name="user_id" id="reset-password-user-id">
-    </form>
     {% endif %}
   </div>
 </div>
 
 <script>
-let currentEditName = '';
+let currentEditName   = '';
+let currentEditUserId = '';
 
 function openEdit(id, firstName, lastName, email, jobTitle, isActive, fullName, isSelf) {
   document.getElementById('edit-user-id').value    = id;
@@ -246,18 +253,45 @@ function openEdit(id, firstName, lastName, email, jobTitle, isActive, fullName, 
   document.getElementById('edit-job-title').value  = jobTitle;
   document.getElementById('edit-active-yes').checked = isActive;
   document.getElementById('edit-active-no').checked  = !isActive;
-  currentEditName = fullName;
+  currentEditName   = fullName;
+  currentEditUserId = id;
   const resetBlock = document.getElementById('reset-password-block');
   if (resetBlock) {
     resetBlock.style.display = isSelf ? 'none' : '';
-    document.getElementById('reset-password-user-id').value = id;
+    document.getElementById('reset-password-result').style.display = 'none';
+    document.getElementById('reset-password-value').value = '';
+    document.getElementById('reset-password-hint').style.display = '';
+    document.getElementById('reset-password-btn').disabled = false;
   }
   document.getElementById('edit-modal').classList.add('open');
 }
 
-function resetPassword() {
+async function resetPassword() {
   if (!confirm(`Resetar a senha de ${currentEditName}? Uma nova senha temporária será gerada e ele(a) precisará trocá-la no próximo acesso.`)) return;
-  document.getElementById('reset-password-form').submit();
+  const btn = document.getElementById('reset-password-btn');
+  btn.disabled = true;
+  try {
+    const csrftoken = document.querySelector('#edit-form [name=csrfmiddlewaretoken]').value;
+    const res = await fetch('{% url "accounts:reset_member_password" %}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'user_id=' + encodeURIComponent(currentEditUserId),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Falha ao resetar senha.');
+    document.getElementById('reset-password-value').value = data.password;
+    document.getElementById('reset-password-result').style.display = '';
+    document.getElementById('reset-password-hint').style.display = 'none';
+  } catch (err) {
+    alert(err.message || 'Falha ao resetar senha.');
+    btn.disabled = false;
+  }
+}
+
+function copyResetPassword() {
+  const field = document.getElementById('reset-password-value');
+  field.select();
+  navigator.clipboard?.writeText(field.value).catch(() => document.execCommand('copy'));
 }
 </script>
 {% endblock %}

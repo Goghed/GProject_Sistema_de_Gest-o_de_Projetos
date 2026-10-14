@@ -57,6 +57,11 @@
 .task-due.overdue { color: var(--coral); font-weight: 600; }
 .task-blocked-ico { font-size: 14px; }
 
+@media (max-width: 640px) {
+  .task-row { flex-wrap: wrap; row-gap: 6px; }
+  .task-project { flex-basis: 100%; padding-left: 22px; }
+}
+
 .status-colors {
   backlog: var(--text3); todo: var(--accent3); in_progress: var(--sky);
   review: var(--amber); done: var(--green); archived: var(--text3);
