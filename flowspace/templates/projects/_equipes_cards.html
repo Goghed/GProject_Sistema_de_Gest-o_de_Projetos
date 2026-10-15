@@ -1,0 +1,160 @@
+{% if equipes %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:24px">
+{% for equipe in equipes %}
+{% with atribs=equipe.atribuicoes.all %}
+<div class="card fade-up" style="animation-delay:.3s;padding:0;overflow:hidden">
+
+  <!-- Cabeçalho da equipe -->
+  {% if equipe.cidade == "itu" %}
+  <div style="background:linear-gradient(135deg,#ca8a04 0%,#a16207 100%);padding:14px 16px">
+  {% elif equipe.cidade == "londrina" %}
+  <div style="background:linear-gradient(135deg,#dc2626 0%,#991b1b 100%);padding:14px 16px">
+  {% else %}
+  <div style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 100%);padding:14px 16px">
+  {% endif %}
+    <div style="font-size:9px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,.5);text-transform:uppercase;margin-bottom:8px">Equipe</div>
+    <div style="display:flex;align-items:flex-start;gap:12px">
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <!-- Foto do técnico ou initials -->
+        {% if equipe.foto %}
+        <img src="{{ equipe.foto.url }}" alt="{{ equipe.tecnico }}"
+             style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,.2)">
+        {% elif equipe.tecnico_user and equipe.tecnico_user.photo %}
+        <img src="{{ equipe.tecnico_user.photo.url }}" alt="{{ equipe.tecnico }}"
+             style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,.2)">
+        {% else %}
+        <div style="width:52px;height:52px;border-radius:12px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-family:var(--syne);font-size:20px;font-weight:800;color:#fff;border:2px solid rgba(255,255,255,.1)">
+          {{ equipe.tecnico|first|upper }}
+        </div>
+        {% endif %}
+        <!-- Foto do auxiliar ou initials -->
+        {% if equipe.auxiliar %}
+          {% if equipe.foto_auxiliar %}
+          <img src="{{ equipe.foto_auxiliar.url }}" alt="{{ equipe.auxiliar }}"
+               style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,.2)">
+          {% elif equipe.auxiliar_user and equipe.auxiliar_user.photo %}
+          <img src="{{ equipe.auxiliar_user.photo.url }}" alt="{{ equipe.auxiliar }}"
+               style="width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,.2)">
+          {% else %}
+          <div style="width:52px;height:52px;border-radius:12px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-family:var(--syne);font-size:20px;font-weight:800;color:#fff;border:2px solid rgba(255,255,255,.1)">
+            {{ equipe.auxiliar|first|upper }}
+          </div>
+          {% endif %}
+        {% endif %}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="font-size:14px;font-weight:800;color:#fff;font-family:var(--syne)">{{ equipe.tecnico }}</span>
+          <span style="font-size:10px;color:rgba(255,255,255,.45);background:rgba(255,255,255,.1);padding:1px 6px;border-radius:8px;flex-shrink:0">Técnico</span>
+        </div>
+        {% if equipe.auxiliar %}
+        <div style="display:flex;align-items:center;gap:7px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span style="font-size:12px;color:rgba(255,255,255,.75)">{{ equipe.auxiliar }}</span>
+          <span style="font-size:10px;color:rgba(255,255,255,.35);background:rgba(255,255,255,.07);padding:1px 6px;border-radius:8px;flex-shrink:0">Auxiliar</span>
+        </div>
+        {% endif %}
+        {% if equipe.veiculo or equipe.placa %}
+        <div style="display:flex;align-items:center;gap:6px;margin-top:2px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          <span style="font-size:11px;color:rgba(255,255,255,.55)">{{ equipe.veiculo }}{% if equipe.veiculo and equipe.placa %} · {% endif %}{{ equipe.placa }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Slots de projetos -->
+  <div style="padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+
+    {% for atrib in atribs %}
+    {% if atrib.posicao == 0 %}
+    <!-- Atualmente -->
+    <div style="border-left:3px solid #22c55e;padding:8px 10px;background:#f0fdf4;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#16a34a;text-transform:uppercase;margin-bottom:5px">▶ Atualmente</div>
+      {% if atrib.projeto %}
+      <div style="font-size:12px;font-weight:600;color:#166534;margin-bottom:4px">{{ atrib.projeto.name }}</div>
+      {% endif %}
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        {% if atrib.tipo_instalacao %}<span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 7px;border-radius:8px">{{ atrib.tipo_instalacao }}</span>{% endif %}
+        {% if atrib.varejo_projeto %}<span style="font-size:10px;background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:8px">{{ atrib.varejo_projeto }}</span>{% endif %}
+        {% if atrib.dias_execucao %}<span style="font-size:10px;background:#ecfdf5;color:#047857;padding:1px 7px;border-radius:8px">{{ atrib.dias_execucao }}</span>{% endif %}
+      </div>
+      {% if atrib.data_inicio or atrib.data_termino %}
+      <div style="font-size:10px;color:#4ade80;margin-top:4px">
+        {% if atrib.data_inicio %}{{ atrib.data_inicio|date:"d/m/Y" }}{% endif %}{% if atrib.data_inicio and atrib.data_termino %} → {% endif %}{% if atrib.data_termino %}{{ atrib.data_termino|date:"d/m/Y" }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% elif atrib.posicao == 1 %}
+    <!-- Fila 1 -->
+    <div style="border-left:3px solid #f59e0b;padding:8px 10px;background:#fffbeb;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#b45309;text-transform:uppercase;margin-bottom:5px">⏳ Fila 1</div>
+      {% if atrib.projeto %}
+      <div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:4px">{{ atrib.projeto.name }}</div>
+      {% endif %}
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        {% if atrib.tipo_instalacao %}<span style="font-size:10px;background:#fef3c7;color:#b45309;padding:1px 7px;border-radius:8px">{{ atrib.tipo_instalacao }}</span>{% endif %}
+        {% if atrib.varejo_projeto %}<span style="font-size:10px;background:#fde68a;color:#92400e;padding:1px 7px;border-radius:8px">{{ atrib.varejo_projeto }}</span>{% endif %}
+        {% if atrib.dias_execucao %}<span style="font-size:10px;background:#fffbeb;color:#b45309;padding:1px 7px;border-radius:8px">{{ atrib.dias_execucao }}</span>{% endif %}
+      </div>
+      {% if atrib.data_inicio or atrib.data_termino %}
+      <div style="font-size:10px;color:#fbbf24;margin-top:4px">
+        {% if atrib.data_inicio %}{{ atrib.data_inicio|date:"d/m/Y" }}{% endif %}{% if atrib.data_inicio and atrib.data_termino %} → {% endif %}{% if atrib.data_termino %}{{ atrib.data_termino|date:"d/m/Y" }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% elif atrib.posicao == 2 %}
+    <!-- Fila 2 -->
+    <div style="border-left:3px solid #fb923c;padding:8px 10px;background:#fff7ed;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#c2410c;text-transform:uppercase;margin-bottom:5px">⏳ Fila 2</div>
+      {% if atrib.projeto %}
+      <div style="font-size:12px;font-weight:600;color:#9a3412;margin-bottom:4px">{{ atrib.projeto.name }}</div>
+      {% endif %}
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        {% if atrib.tipo_instalacao %}<span style="font-size:10px;background:#ffedd5;color:#c2410c;padding:1px 7px;border-radius:8px">{{ atrib.tipo_instalacao }}</span>{% endif %}
+        {% if atrib.varejo_projeto %}<span style="font-size:10px;background:#fed7aa;color:#9a3412;padding:1px 7px;border-radius:8px">{{ atrib.varejo_projeto }}</span>{% endif %}
+        {% if atrib.dias_execucao %}<span style="font-size:10px;background:#fff7ed;color:#c2410c;padding:1px 7px;border-radius:8px">{{ atrib.dias_execucao }}</span>{% endif %}
+      </div>
+      {% if atrib.data_inicio or atrib.data_termino %}
+      <div style="font-size:10px;color:#fb923c;margin-top:4px">
+        {% if atrib.data_inicio %}{{ atrib.data_inicio|date:"d/m/Y" }}{% endif %}{% if atrib.data_inicio and atrib.data_termino %} → {% endif %}{% if atrib.data_termino %}{{ atrib.data_termino|date:"d/m/Y" }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% elif atrib.posicao == 3 %}
+    <!-- Fila 3 -->
+    <div style="border-left:3px solid #94a3b8;padding:8px 10px;background:#f8fafc;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748b;text-transform:uppercase;margin-bottom:5px">⏳ Fila 3</div>
+      {% if atrib.projeto %}
+      <div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:4px">{{ atrib.projeto.name }}</div>
+      {% endif %}
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        {% if atrib.tipo_instalacao %}<span style="font-size:10px;background:#f1f5f9;color:#64748b;padding:1px 7px;border-radius:8px">{{ atrib.tipo_instalacao }}</span>{% endif %}
+        {% if atrib.varejo_projeto %}<span style="font-size:10px;background:#e2e8f0;color:#475569;padding:1px 7px;border-radius:8px">{{ atrib.varejo_projeto }}</span>{% endif %}
+        {% if atrib.dias_execucao %}<span style="font-size:10px;background:#f8fafc;color:#64748b;padding:1px 7px;border-radius:8px">{{ atrib.dias_execucao }}</span>{% endif %}
+      </div>
+      {% if atrib.data_inicio or atrib.data_termino %}
+      <div style="font-size:10px;color:#94a3b8;margin-top:4px">
+        {% if atrib.data_inicio %}{{ atrib.data_inicio|date:"d/m/Y" }}{% endif %}{% if atrib.data_inicio and atrib.data_termino %} → {% endif %}{% if atrib.data_termino %}{{ atrib.data_termino|date:"d/m/Y" }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    {% if not atribs %}
+    <div style="text-align:center;color:var(--text3);padding:16px 0;font-size:12px">Sem projetos agendados</div>
+    {% endif %}
+
+  </div>
+</div>
+{% endwith %}
+{% endfor %}
+</div>
+
+{% else %}
+<div class="card fade-up" style="animation-delay:.3s;text-align:center;color:var(--text3);padding:32px">
+  Nenhuma equipe técnica cadastrada. <a href="{% url 'projects:equipes' %}" style="color:var(--accent)">Cadastrar equipe</a>
+</div>
+{% endif %}

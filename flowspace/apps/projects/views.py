@@ -38,6 +38,106 @@ def _bar_position(proj, total_days=180):
     return round(left, 1), round(width, 1)
 
 
+_GANTT_STATUS_LABEL = {
+    "backlog": "Backlog", "todo": "A fazer", "in_progress": "Em progresso",
+    "review": "Review", "done": "Concluído",
+}
+_GANTT_PRIORITY_LABEL = {"urgent": "Urgente", "high": "Alta", "medium": "Média", "low": "Baixa"}
+
+
+def _build_gantt_rows(proj_list, today):
+    """Monta as linhas do mini-Gantt 'Status dos Projetos' do dashboard.
+    Compartilhado entre o render inicial (dashboard) e o polling ao vivo
+    (dashboard_stats_json), pra nunca haver divergência entre os dois."""
+    from apps.tasks.models import Task as _Task
+    from django.db.models import Min as _Min
+
+    _earliest = _Task.objects.filter(
+        project__in=proj_list
+    ).exclude(status="archived").aggregate(
+        s=_Min("start_date"), d=_Min("due_date")
+    )
+    _candidates = [d for d in [_earliest["s"], _earliest["d"], today - timedelta(days=7)] if d]
+    gantt_dash_start = min(_candidates) - timedelta(days=3)
+    gantt_dash_end   = today + timedelta(days=83)
+    gantt_rows       = []
+    for p in proj_list:
+        # Gantt mostra todas as tarefas do projeto para todos os usuários acompanharem
+        gd_tasks_qs = list(
+            _Task.objects
+            .filter(project=p)
+            .exclude(status="archived")
+            .prefetch_related("assignees", "issues", "subtasks")
+            .order_by("status", "position")
+        )
+        gd_tasks = []
+        for t in gd_tasks_qs:
+            t_start = t.start_date
+            if not t_start and t.due_date and t.duration_days:
+                t_start = t.due_date - timedelta(days=t.duration_days - 1)
+            if not t_start:
+                # Sem data inicial explícita: usa due_date como bloco de um dia
+                t_start = t.due_date or today
+            t_end = t.due_date or t_start
+            if t.duration_days:
+                t_end = max(t_end, t_start + timedelta(days=t.duration_days - 1))
+            if t.status == "done":          c = p.color
+            elif t.is_blocked:              c = "#fbbf24"
+            elif t.status == "review":      c = "#a855f7"
+            elif t.status == "in_progress":  c = "#0ea5e9"
+            else:                           c = "#c7c7d4"   # backlog / todo
+            issue_dates = [
+                timezone.localtime(issue.created_at).date().isoformat()
+                for issue in t.issues.all()
+                if not issue.resolved
+            ]
+            all_subs  = list(t.subtasks.all())
+            sub_total = len(all_subs)
+            sub_done  = sum(1 for s in all_subs if s.done)
+            gd_tasks.append({
+                "id":             str(t.pk),
+                "title":          t.title,
+                "status":         "blocked" if t.is_blocked else t.status,
+                "status_display": "Bloqueada" if t.is_blocked else _GANTT_STATUS_LABEL.get(t.status, t.status),
+                "priority":       _GANTT_PRIORITY_LABEL.get(t.priority, t.priority),
+                "start":          t_start.isoformat(),
+                "end":            t_end.isoformat(),
+                "color":          c,
+                "url":            f"/tasks/{t.pk}/",
+                "due":            t.due_date.strftime("%d/%m/%Y") if t.due_date else "—",
+                "due_date_iso":   t.due_date.isoformat() if t.due_date else None,
+                "assignees":      [{"initials": a.initials, "color": a.avatar_color}
+                                   for a in t.assignees.all()[:3]],
+                "issue_dates":    issue_dates,
+                "work_saturday":  t.work_saturday,
+                "work_sunday":    t.work_sunday,
+                "subtask_total":  sub_total,
+                "subtask_done":   sub_done,
+                "is_blocked":     t.is_blocked,
+            })
+        gantt_rows.append({
+            "name":     p.name,
+            "proj_url": f"/dashboard/projects/{p.pk}/",
+            "color":    p.color,
+            "tasks":    gd_tasks,
+        })
+    return gantt_rows, gantt_dash_start, gantt_dash_end
+
+
+def _get_equipes(cidade_filter):
+    equipes_qs = EquipeTecnica.objects.filter(is_active=True).select_related("tecnico_user", "auxiliar_user")
+    if cidade_filter:
+        equipes_qs = equipes_qs.filter(cidade=cidade_filter)
+    return list(
+        equipes_qs.prefetch_related(
+            Prefetch(
+                "atribuicoes",
+                queryset=AtribuicaoEquipe.objects.select_related("projeto").order_by("posicao"),
+            )
+        )
+    )
+
+
 @login_required
 def dashboard(request):
     import json as _json
@@ -160,93 +260,9 @@ def dashboard(request):
                 "pause_dates": pause_dates,
             })
 
-    # ── Mini Gantt do dashboard ────────────────────────────────────────────────
-    from apps.tasks.models import Task as _Task
-    from django.db.models import Min as _Min
-    _PRIORITY_LABEL  = {"urgent": "Urgente", "high": "Alta", "medium": "Média", "low": "Baixa"}
-
-    # Janela dinâmica: começa na tarefa mais antiga (start_date ou due_date)
-    _earliest = _Task.objects.filter(
-        project__in=proj_list
-    ).exclude(status="archived").aggregate(
-        s=_Min("start_date"), d=_Min("due_date")
-    )
-    _candidates = [d for d in [_earliest["s"], _earliest["d"], today - timedelta(days=7)] if d]
-    gantt_dash_start = min(_candidates) - timedelta(days=3)
-    gantt_dash_end   = today + timedelta(days=83)
-    gantt_rows       = []
-    for p in proj_list:
-        # Gantt mostra todas as tarefas do projeto para todos os usuários acompanharem
-        gd_tasks_qs = list(
-            _Task.objects
-            .filter(project=p)
-            .exclude(status="archived")
-            .prefetch_related("assignees", "issues", "subtasks")
-            .order_by("status", "position")
-        )
-        gd_tasks = []
-        for t in gd_tasks_qs:
-            t_start = t.start_date
-            if not t_start and t.due_date and t.duration_days:
-                t_start = t.due_date - timedelta(days=t.duration_days - 1)
-            if not t_start:
-                # Sem data inicial explícita: usa due_date como bloco de um dia
-                t_start = t.due_date or today
-            t_end = t.due_date or t_start
-            if t.duration_days:
-                t_end = max(t_end, t_start + timedelta(days=t.duration_days - 1))
-            if t.status == "done":          c = p.color
-            elif t.is_blocked:              c = "#fbbf24"
-            elif t.status == "review":      c = "#a855f7"
-            elif t.status == "in_progress":  c = "#0ea5e9"
-            else:                           c = "#c7c7d4"   # backlog / todo
-            issue_dates = [
-                timezone.localtime(issue.created_at).date().isoformat()
-                for issue in t.issues.all()
-                if not issue.resolved
-            ]
-            all_subs  = list(t.subtasks.all())
-            sub_total = len(all_subs)
-            sub_done  = sum(1 for s in all_subs if s.done)
-            gd_tasks.append({
-                "id":             str(t.pk),
-                "title":          t.title,
-                "status":         "blocked" if t.is_blocked else t.status,
-                "status_display": "Bloqueada" if t.is_blocked else _STATUS_LABEL.get(t.status, t.status),
-                "priority":       _PRIORITY_LABEL.get(t.priority, t.priority),
-                "start":          t_start.isoformat(),
-                "end":            t_end.isoformat(),
-                "color":          c,
-                "url":            f"/tasks/{t.pk}/",
-                "due":            t.due_date.strftime("%d/%m/%Y") if t.due_date else "—",
-                "due_date_iso":   t.due_date.isoformat() if t.due_date else None,
-                "assignees":      [{"initials": a.initials, "color": a.avatar_color}
-                                   for a in t.assignees.all()[:3]],
-                "issue_dates":    issue_dates,
-                "work_saturday":  t.work_saturday,
-                "work_sunday":    t.work_sunday,
-                "subtask_total":  sub_total,
-                "subtask_done":   sub_done,
-                "is_blocked":     t.is_blocked,
-            })
-        gantt_rows.append({
-            "name":     p.name,
-            "proj_url": f"/dashboard/projects/{p.pk}/",
-            "color":    p.color,
-            "tasks":    gd_tasks,
-        })
-
-    equipes_qs = EquipeTecnica.objects.filter(is_active=True).select_related("tecnico_user", "auxiliar_user")
-    if cidade_filter:
-        equipes_qs = equipes_qs.filter(cidade=cidade_filter)
-    equipes = list(
-        equipes_qs.prefetch_related(
-            Prefetch(
-                "atribuicoes",
-                queryset=AtribuicaoEquipe.objects.select_related("projeto").order_by("posicao"),
-            )
-        )
-    )
+    # ── Mini Gantt e Equipes Técnicas — compartilhados com o polling ao vivo ──
+    gantt_rows, gantt_dash_start, gantt_dash_end = _build_gantt_rows(proj_list, today)
+    equipes = _get_equipes(cidade_filter)
 
     return render(request, "projects/dashboard.html", {
         "projects":         proj_list,
@@ -722,6 +738,14 @@ def dashboard_stats_json(request):
             "overdue": bool(t.due_date and t.due_date < today),
             "url":     f"/tasks/{t.pk}/",
         })
+
+    # ── Mesmos helpers do render inicial — Gantt e Equipes ficam ao vivo tbm ──
+    from django.template.loader import render_to_string
+    proj_list = list(active.distinct())
+    gantt_rows, gantt_dash_start, gantt_dash_end = _build_gantt_rows(proj_list, today)
+    equipes = _get_equipes(cidade_filter)
+    equipes_html = render_to_string("projects/_equipes_cards.html", {"equipes": equipes}, request=request)
+
     resp = JsonResponse({
         "projects":           active.count(),
         "projects_completed": completed.count(),
@@ -729,6 +753,10 @@ def dashboard_stats_json(request):
         "done_tasks":         Task.objects.filter(project__in=non_archived, status="done").count(),
         "overdue":            all_tasks.filter(due_date__lt=today).exclude(status__in=["done", "archived"]).count(),
         "tasks":              tasks_data,
+        "gantt_rows":         gantt_rows,
+        "gantt_dash_start":   gantt_dash_start.isoformat(),
+        "gantt_dash_end":     gantt_dash_end.isoformat(),
+        "equipes_html":       equipes_html,
     })
     resp["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return resp
