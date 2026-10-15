@@ -196,7 +196,7 @@ def dashboard(request):
             if t.duration_days:
                 t_end = max(t_end, t_start + timedelta(days=t.duration_days - 1))
             if t.status == "done":          c = p.color
-            elif t.is_blocked:              c = "#1a1a1a"
+            elif t.is_blocked:              c = "#fbbf24"
             elif t.status == "review":      c = "#a855f7"
             elif t.status == "in_progress":  c = "#0ea5e9"
             else:                           c = "#c7c7d4"   # backlog / todo
@@ -211,8 +211,8 @@ def dashboard(request):
             gd_tasks.append({
                 "id":             str(t.pk),
                 "title":          t.title,
-                "status":         "paused" if t.is_blocked else t.status,
-                "status_display": "Pausada" if t.is_blocked else _STATUS_LABEL.get(t.status, t.status),
+                "status":         "blocked" if t.is_blocked else t.status,
+                "status_display": "Bloqueada" if t.is_blocked else _STATUS_LABEL.get(t.status, t.status),
                 "priority":       _PRIORITY_LABEL.get(t.priority, t.priority),
                 "start":          t_start.isoformat(),
                 "end":            t_end.isoformat(),
