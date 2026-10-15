@@ -54,10 +54,11 @@ def dashboard(request):
     non_archived = projects.exclude(status="archived")
     all_tasks = Task.objects.filter(project__in=active).exclude(status="archived")
     stats = {
-        "projects":   active.count(),
-        "open_tasks": all_tasks.exclude(status__in=["done","archived"]).count(),
-        "done_tasks": Task.objects.filter(project__in=non_archived, status="done").count(),
-        "overdue":    all_tasks.filter(due_date__lt=today).exclude(status__in=["done","archived"]).count(),
+        "projects":           active.count(),
+        "projects_completed": projects.filter(status="completed").count(),
+        "open_tasks":         all_tasks.exclude(status__in=["done","archived"]).count(),
+        "done_tasks":         Task.objects.filter(project__in=non_archived, status="done").count(),
+        "overdue":            all_tasks.filter(due_date__lt=today).exclude(status__in=["done","archived"]).count(),
     }
     recent_tasks = all_tasks.exclude(status__in=["done","archived"]).order_by("-updated_at")[:8]
     proj_list = list(active.distinct())
@@ -431,10 +432,19 @@ def project_list(request):
     cidade_filter = request.GET.get("cidade", "").strip().lower()
     if cidade_filter not in ("londrina", "itu"):
         cidade_filter = ""
+    status_filter = request.GET.get("status", "").strip().lower()
+    if status_filter not in ("active", "completed"):
+        status_filter = ""
     projects = Project.objects.order_by("-updated_at")
     if cidade_filter:
         projects = projects.filter(cidade=cidade_filter)
-    return render(request, "projects/list.html", {"projects": projects, "cidade_filter": cidade_filter})
+    if status_filter == "active":
+        projects = projects.filter(status__in=["active", "on_hold"])
+    elif status_filter == "completed":
+        projects = projects.filter(status="completed")
+    return render(request, "projects/list.html", {
+        "projects": projects, "cidade_filter": cidade_filter, "status_filter": status_filter,
+    })
 
 
 @login_required
@@ -634,6 +644,19 @@ def project_list_view(request, pk):
     })
 
 
+def _advance_equipe_queue(projeto):
+    """Quando um projeto é concluído, tira ele do slot 'Atualmente' de cada
+    equipe técnica atribuída a ele e promove a fila (1→0, 2→1, 3→2)."""
+    slots_atuais = AtribuicaoEquipe.objects.filter(projeto=projeto, posicao=0).select_related("equipe")
+    for slot in slots_atuais:
+        equipe = slot.equipe
+        slot.delete()
+        fila = list(AtribuicaoEquipe.objects.filter(equipe=equipe, posicao__gt=0).order_by("posicao"))
+        for atrib in fila:
+            atrib.posicao -= 1
+            atrib.save(update_fields=["posicao"])
+
+
 @login_required
 def project_settings(request, pk):
     project = get_object_or_404(Project, pk=pk)
@@ -641,6 +664,7 @@ def project_settings(request, pk):
         messages.error(request, "Apenas o dono pode editar configurações.")
         return redirect("projects:kanban", pk=pk)
     if request.method == "POST":
+        old_status = project.status
         project.name = request.POST.get("name", project.name)
         project.description = request.POST.get("description", project.description)
         project.color = request.POST.get("color", project.color)
@@ -650,6 +674,8 @@ def project_settings(request, pk):
         _cidade = request.POST.get("cidade", "").strip()
         project.cidade = _cidade if _cidade in ("londrina", "itu") else ""
         project.save()
+        if old_status != "completed" and project.status == "completed":
+            _advance_equipe_queue(project)
         project.members.set(User.objects.filter(id__in=request.POST.getlist("members")))
         project.members.add(request.user)
         messages.success(request, "Projeto atualizado!")
@@ -672,6 +698,9 @@ def dashboard_stats_json(request):
     non_archived = Project.objects.exclude(status="archived")
     if cidade_filter:
         non_archived = non_archived.filter(cidade=cidade_filter)
+    completed = Project.objects.filter(status="completed")
+    if cidade_filter:
+        completed = completed.filter(cidade=cidade_filter)
     all_tasks = Task.objects.filter(project__in=active).exclude(status="archived")
     recent = (
         all_tasks.exclude(status__in=["done", "archived"])
@@ -694,11 +723,12 @@ def dashboard_stats_json(request):
             "url":     f"/tasks/{t.pk}/",
         })
     resp = JsonResponse({
-        "projects":   active.count(),
-        "open_tasks": all_tasks.exclude(status__in=["done", "archived"]).count(),
-        "done_tasks": Task.objects.filter(project__in=non_archived, status="done").count(),
-        "overdue":    all_tasks.filter(due_date__lt=today).exclude(status__in=["done", "archived"]).count(),
-        "tasks":      tasks_data,
+        "projects":           active.count(),
+        "projects_completed": completed.count(),
+        "open_tasks":         all_tasks.exclude(status__in=["done", "archived"]).count(),
+        "done_tasks":         Task.objects.filter(project__in=non_archived, status="done").count(),
+        "overdue":            all_tasks.filter(due_date__lt=today).exclude(status__in=["done", "archived"]).count(),
+        "tasks":              tasks_data,
     })
     resp["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return resp

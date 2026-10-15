@@ -2,19 +2,35 @@
 {% block title %}Projetos — G Project{% endblock %}
 {% block page_title %}Todos os Projetos{% endblock %}
 {% block topbar_actions %}
-<div style="display:flex;gap:6px;align-items:center">
-  <a href="{% url 'projects:list' %}"
-     style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid var(--border2);{% if not cidade_filter %}background:var(--accent);color:#fff;border-color:var(--accent);{% else %}color:var(--text2);{% endif %}">
-    Todas
-  </a>
-  <a href="{% url 'projects:list' %}?cidade=londrina"
-     style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if cidade_filter == 'londrina' %}#dc2626{% else %}var(--border2){% endif %};{% if cidade_filter == 'londrina' %}background:#dc2626;color:#fff;{% else %}color:#dc2626;{% endif %}">
-    Londrina
-  </a>
-  <a href="{% url 'projects:list' %}?cidade=itu"
-     style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if cidade_filter == 'itu' %}#d97706{% else %}var(--border2){% endif %};{% if cidade_filter == 'itu' %}background:#d97706;color:#fff;{% else %}color:#d97706;{% endif %}">
-    Itu
-  </a>
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+  <div style="display:flex;gap:6px;align-items:center">
+    <a href="?{% if status_filter %}status={{ status_filter }}&{% endif %}"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid var(--border2);{% if not cidade_filter %}background:var(--accent);color:#fff;border-color:var(--accent);{% else %}color:var(--text2);{% endif %}">
+      Todas
+    </a>
+    <a href="?cidade=londrina{% if status_filter %}&status={{ status_filter }}{% endif %}"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if cidade_filter == 'londrina' %}#dc2626{% else %}var(--border2){% endif %};{% if cidade_filter == 'londrina' %}background:#dc2626;color:#fff;{% else %}color:#dc2626;{% endif %}">
+      Londrina
+    </a>
+    <a href="?cidade=itu{% if status_filter %}&status={{ status_filter }}{% endif %}"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if cidade_filter == 'itu' %}#d97706{% else %}var(--border2){% endif %};{% if cidade_filter == 'itu' %}background:#d97706;color:#fff;{% else %}color:#d97706;{% endif %}">
+      Itu
+    </a>
+  </div>
+  <div style="display:flex;gap:6px;align-items:center;padding-left:10px;border-left:1px solid var(--border2)">
+    <a href="?{% if cidade_filter %}cidade={{ cidade_filter }}&{% endif %}"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid var(--border2);{% if not status_filter %}background:var(--surface2);color:var(--text);{% else %}color:var(--text2);{% endif %}">
+      Todos
+    </a>
+    <a href="?{% if cidade_filter %}cidade={{ cidade_filter }}&{% endif %}status=active"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if status_filter == 'active' %}#059669{% else %}var(--border2){% endif %};{% if status_filter == 'active' %}background:#059669;color:#fff;{% else %}color:#059669;{% endif %}">
+      Ativos
+    </a>
+    <a href="?{% if cidade_filter %}cidade={{ cidade_filter }}&{% endif %}status=completed"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if status_filter == 'completed' %}#5b4cf5{% else %}var(--border2){% endif %};{% if status_filter == 'completed' %}background:#5b4cf5;color:#fff;{% else %}color:#5b4cf5;{% endif %}">
+      Concluídos
+    </a>
+  </div>
 </div>
 <a href="{% url 'projects:create' %}" class="btn btn-primary btn-sm">+ Novo Projeto</a>
 {% endblock %}

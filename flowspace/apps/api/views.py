@@ -278,6 +278,8 @@ def project_update(request, pk):
     if not (request.user == proj.owner or proj.can_create_tasks(request.user) or request.user.is_superuser):
         return Response({"error": "Sem permissão para editar este projeto."}, status=403)
 
+    old_status = proj.status
+
     for field in ("name", "description", "color", "status"):
         if field in request.data:
             setattr(proj, field, request.data[field])
@@ -289,6 +291,10 @@ def project_update(request, pk):
         proj.due_date = request.data["due_date"] or None
 
     proj.save()
+
+    if old_status != "completed" and proj.status == "completed":
+        from apps.projects.views import _advance_equipe_queue
+        _advance_equipe_queue(proj)
 
     return Response(ProjectDetailSerializer(proj).data)
 

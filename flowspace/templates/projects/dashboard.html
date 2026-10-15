@@ -3,8 +3,9 @@
 {% block page_title %}Visão Geral{% endblock %}
 {% block extra_head %}
 <style>
-.stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px; }
-@media (max-width: 768px) { .stat-grid { grid-template-columns:repeat(2,1fr); } }
+.stat-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:24px; }
+@media (max-width: 900px) { .stat-grid { grid-template-columns:repeat(3,1fr); } }
+@media (max-width: 560px) { .stat-grid { grid-template-columns:repeat(2,1fr); } }
 @media (max-width: 420px) { .stat-grid { grid-template-columns:1fr; } }
 </style>
 {% endblock %}
@@ -31,6 +32,10 @@
   <div class="card card-sm fade-up">
     <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Projetos Ativos</div>
     <div id="stat-projects" style="font-family:var(--syne);font-size:30px;font-weight:800;letter-spacing:-1px;transition:color .3s">{{ stats.projects }}</div>
+  </div>
+  <div class="card card-sm fade-up" style="animation-delay:.03s">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Projetos Concluídos</div>
+    <div id="stat-projects-completed" style="font-family:var(--syne);font-size:30px;font-weight:800;color:#34d399;letter-spacing:-1px;transition:color .3s">{{ stats.projects_completed }}</div>
   </div>
   <div class="card card-sm fade-up" style="animation-delay:.05s">
     <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Tarefas Abertas</div>
@@ -459,12 +464,13 @@
   const INTERVAL  = 5000;
 
   const els = {
-    projects: document.getElementById('stat-projects'),
-    open:     document.getElementById('stat-open'),
-    done:     document.getElementById('stat-done'),
-    overdue:  document.getElementById('stat-overdue'),
-    dot:      document.getElementById('live-dot'),
-    label:    document.getElementById('live-label'),
+    projects:          document.getElementById('stat-projects'),
+    projectsCompleted: document.getElementById('stat-projects-completed'),
+    open:               document.getElementById('stat-open'),
+    done:               document.getElementById('stat-done'),
+    overdue:            document.getElementById('stat-overdue'),
+    dot:                document.getElementById('live-dot'),
+    label:              document.getElementById('live-label'),
   };
 
   let lastUpdated = Date.now();
@@ -500,7 +506,8 @@
       if (!res.ok) throw new Error('network');
       const data = await res.json();
 
-      updateStat(els.projects, data.projects);
+      updateStat(els.projects,          data.projects);
+      updateStat(els.projectsCompleted, data.projects_completed);
       updateStat(els.open,     data.open_tasks);
       updateStat(els.done,     data.done_tasks);
       updateStat(els.overdue,  data.overdue);
