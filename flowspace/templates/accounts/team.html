@@ -60,7 +60,10 @@
           </div>
           <div>
             <div style="font-weight:600;font-size:13px">{{ u.get_full_name|default:u.username }}</div>
-            <div style="font-size:11px;color:var(--text3)">{{ u.email }}</div>
+            <div style="font-size:11px;color:var(--text3)">
+              <span style="font-family:monospace;font-weight:600;color:var(--accent)" title="Usuário de login">@{{ u.username }}</span>
+              · {{ u.email }}
+            </div>
           </div>
         </div>
       </td>
@@ -112,7 +115,8 @@
           '{{ u.job_title|escapejs }}',
           {{ u.is_active|yesno:'true,false' }},
           '{{ u.get_full_name|default:u.username|escapejs }}',
-          {% if u.id == request.user.id %}true{% else %}false{% endif %}
+          {% if u.id == request.user.id %}true{% else %}false{% endif %},
+          '{{ u.username|escapejs }}'
         )">✏ Editar</button>
         {% endif %}
         {% if u.id != request.user.id %}
@@ -175,6 +179,12 @@
     <form method="post" id="edit-form">{% csrf_token %}
       <input type="hidden" name="action" value="edit_member">
       <input type="hidden" name="user_id" id="edit-user-id">
+
+      <div class="form-group">
+        <label class="form-label">Usuário (login)</label>
+        <input type="text" id="edit-username" class="form-control" readonly
+               style="font-family:monospace;font-weight:600;background:var(--surface2)">
+      </div>
 
       <div class="form-grid-2">
         <div class="form-group">
@@ -245,8 +255,9 @@
 let currentEditName   = '';
 let currentEditUserId = '';
 
-function openEdit(id, firstName, lastName, email, jobTitle, isActive, fullName, isSelf) {
+function openEdit(id, firstName, lastName, email, jobTitle, isActive, fullName, isSelf, username) {
   document.getElementById('edit-user-id').value    = id;
+  document.getElementById('edit-username').value   = username;
   document.getElementById('edit-first-name').value = firstName;
   document.getElementById('edit-last-name').value  = lastName;
   document.getElementById('edit-email').value      = email;
