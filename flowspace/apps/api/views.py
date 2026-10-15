@@ -12,13 +12,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.common.uploads import validate_image_upload, validate_generic_upload
 from apps.accounts.models import User
-from apps.projects.models import Project, Column
+from apps.projects.models import Project, Column, ProjectDocument
 from apps.tasks.models import Task, SubTask, Comment, TaskAttachment, DailyReport, TaskIssue, TaskDependency
 from apps.notifications.models import Notification
 from .serializers import (
     UserSerializer, ProjectListSerializer, ProjectDetailSerializer,
     TaskListSerializer, TaskDetailSerializer, CommentSerializer,
-    TaskAttachmentSerializer,
+    TaskAttachmentSerializer, ProjectDocumentSerializer,
 )
 
 
@@ -226,6 +226,57 @@ def project_detail(request, pk):
         return Response({"error": "Não encontrado."}, status=404)
 
     return Response(ProjectDetailSerializer(proj).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def project_documents(request, pk):
+
+    proj = Project.objects.filter(
+        Q(members=request.user) | Q(tasks__assignees=request.user),
+        pk=pk,
+    ).distinct().first()
+
+    if not proj:
+        return Response({"error": "Não encontrado."}, status=404)
+
+    docs = ProjectDocument.objects.filter(project=proj).select_related("uploaded_by").order_by("-created_at")
+    return Response(ProjectDocumentSerializer(docs, many=True, context={"request": request}).data)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def api_download_document(request, doc_id):
+    """Serve o documento só para membros do projeto ou responsáveis por alguma
+    tarefa dele — o /media/ cru não tem nenhuma checagem de permissão, então
+    não pode virar um link direto.
+
+    Aceita autenticação tanto via header Authorization (chamadas normais via
+    axios) quanto via ?token=<access_token> na query string — necessário para
+    abrir o arquivo direto no visualizador do sistema (Linking.openURL), que
+    não consegue enviar headers customizados."""
+    from django.http import FileResponse, Http404
+
+    user = request.user
+    if not user.is_authenticated:
+        token_str = request.query_params.get("token")
+        if not token_str:
+            raise Http404
+        try:
+            from rest_framework_simplejwt.tokens import AccessToken
+            user = User.objects.get(id=AccessToken(token_str)["user_id"])
+        except Exception:
+            raise Http404
+
+    doc = ProjectDocument.objects.select_related("project").filter(
+        Q(project__members=user) | Q(project__tasks__assignees=user),
+        pk=doc_id,
+    ).distinct().first()
+
+    if not doc or not doc.file:
+        raise Http404
+
+    return FileResponse(doc.file.open("rb"), filename=doc.file.name.split("/")[-1], as_attachment=False)
 
 
 @api_view(["POST"])

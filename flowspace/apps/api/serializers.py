@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from apps.accounts.models import User
-from apps.projects.models import Project, Column
+from apps.projects.models import Project, Column, ProjectDocument
 from apps.tasks.models import Task, SubTask, Comment, IssueComment, TaskDependency
 
 
@@ -110,6 +110,24 @@ class TaskAttachmentSerializer(serializers.ModelSerializer):
         # protegida que confere se o usuário é membro do projeto da tarefa.
         from django.urls import reverse
         path = reverse("api:download_attachment", kwargs={"attachment_id": obj.pk})
+        request = self.context.get("request")
+        return request.build_absolute_uri(path) if request else path
+
+
+class ProjectDocumentSerializer(serializers.ModelSerializer):
+    uploaded_by = UserSerializer(read_only=True)
+    url         = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = ProjectDocument
+        fields = ["id", "title", "description", "url", "uploaded_by", "created_at"]
+
+    def get_url(self, obj):
+        # Não expõe o /media/ cru (sem checagem de permissão) — passa pela view
+        # protegida que confere se o usuário é membro do projeto ou responsável
+        # por alguma tarefa dele.
+        from django.urls import reverse
+        path = reverse("api:download_document", kwargs={"doc_id": obj.pk})
         request = self.context.get("request")
         return request.build_absolute_uri(path) if request else path
 
@@ -232,7 +250,7 @@ class ProjectListSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Project
         fields = [
-            "id", "name", "description", "color", "status", "status_display",
+            "id", "name", "description", "scope", "color", "status", "status_display",
             "start_date", "due_date", "task_count", "completed_count",
             "progress", "owner", "members", "created_at", "updated_at",
         ]

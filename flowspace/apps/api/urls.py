@@ -22,6 +22,8 @@ urlpatterns = [
     path("projects/create/",               views.project_create,            name="project_create"),
     path("projects/<uuid:pk>/",            views.project_detail,            name="project_detail"),
     path("projects/<uuid:pk>/update/",     views.project_update,            name="project_update"),
+    path("projects/<uuid:pk>/documents/",  views.project_documents,         name="project_documents"),
+    path("documents/<int:doc_id>/download/", views.api_download_document,   name="download_document"),
 
     # Kanban
     path("kanban/move/",                           views.kanban_move_task,  name="kanban_move"),
