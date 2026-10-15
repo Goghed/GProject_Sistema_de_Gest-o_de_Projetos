@@ -1,5 +1,6 @@
 import json
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.utils import timezone
 from django.contrib.auth import authenticate
 from django.utils import timezone
@@ -115,13 +116,14 @@ def dashboard_view(request):
         members=user,
         status__in=["active", "on_hold"]
     )
-    non_archived_projects = Project.objects.filter(members=user).exclude(status="archived")
 
-    # "Minhas Tarefas" = apenas tarefas atribuídas ao usuário em projetos ativos
-    my_scope   = Task.objects.filter(project__in=projects, assignees=user).exclude(status="archived")
+    # "Minhas Tarefas" / "Concluídas" = tarefas atribuídas ao usuário, independente de
+    # ele constar como "membro" formal do projeto (um técnico pode ser responsável por
+    # uma tarefa sem nunca ter sido adicionado como membro — ver apps/api/views.py
+    # task_list para o mesmo bug já corrigido). Só exclui projeto arquivado.
+    my_scope   = Task.objects.filter(assignees=user).exclude(status="archived").exclude(project__status="archived")
     open_tasks = my_scope.exclude(status="done")
-    # "Concluídas" não pode usar `projects` (active/on_hold) — senão some ao marcar o projeto como completed
-    done_tasks = Task.objects.filter(project__in=non_archived_projects, assignees=user, status="done")
+    done_tasks = Task.objects.filter(assignees=user, status="done").exclude(project__status="archived")
 
     # "Em Atraso" = role-aware, igual ao web (managers veem todo o projeto)
     is_manager = user.role in ("owner", "admin", "manager")
@@ -150,7 +152,7 @@ def dashboard_view(request):
     # Tempo médio de conclusão (started_at → completed_at)
     done_timed = list(my_done.filter(started_at__isnull=False, completed_at__isnull=False))
     if done_timed:
-        deltas             = [(t.completed_at.date() - t.started_at).days for t in done_timed]
+        deltas             = [(t.completed_at.date() - t.started_at.date()).days for t in done_timed]
         avg_completion_days = round(sum(deltas) / len(deltas), 1)
     else:
         avg_completion_days = None
@@ -198,9 +200,11 @@ def dashboard_view(request):
 @permission_classes([IsAuthenticated])
 def project_list(request):
 
+    # Membros formais + quem tem ao menos uma tarefa atribuída no projeto
+    # (ex: técnico de campo que nunca foi adicionado como membro formal).
     qs = Project.objects.filter(
-        members=request.user
-    ).order_by("-updated_at")
+        Q(members=request.user) | Q(tasks__assignees=request.user)
+    ).distinct().order_by("-updated_at")
 
     if request.query_params.get("status"):
         qs = qs.filter(status=request.query_params["status"])
@@ -212,10 +216,11 @@ def project_list(request):
 @permission_classes([IsAuthenticated])
 def project_detail(request, pk):
 
+    # Leitura: membro formal OU responsável por alguma tarefa do projeto.
     proj = Project.objects.filter(
+        Q(members=request.user) | Q(tasks__assignees=request.user),
         pk=pk,
-        members=request.user
-    ).first()
+    ).distinct().first()
 
     if not proj:
         return Response({"error": "Não encontrado."}, status=404)
@@ -293,9 +298,12 @@ def project_update(request, pk):
 @permission_classes([IsAuthenticated])
 def task_list(request):
 
+    # Membro formal do projeto OU responsável (assignee) pela tarefa —
+    # um técnico pode estar atribuído a tarefas sem nunca ter sido
+    # adicionado formalmente como membro do projeto.
     qs = Task.objects.filter(
-        project__members=request.user
-    ).exclude(status="archived")
+        Q(project__members=request.user) | Q(assignees=request.user)
+    ).exclude(status="archived").distinct()
 
     if request.query_params.get("project"):
         qs = qs.filter(project_id=request.query_params["project"])
@@ -319,8 +327,8 @@ def task_list(request):
 def task_update(request, pk):
 
     task = Task.objects.select_related("project").filter(
+        Q(project__members=request.user) | Q(assignees=request.user),
         pk=pk,
-        project__members=request.user
     ).first()
 
     if not task:
@@ -418,8 +426,8 @@ def task_detail_view(request, pk):
         "issues__reported_by", "issues__responded_by",
         "issues__comments__author",
     ).filter(
+        Q(project__members=request.user) | Q(assignees=request.user),
         pk=pk,
-        project__members=request.user
     ).first()
 
     if not task:
@@ -435,7 +443,8 @@ def advance_status(request, pk):
     from apps.tasks.views import _sync_column, _notify
 
     task = Task.objects.select_related("project", "column").filter(
-        pk=pk, project__members=request.user
+        Q(project__members=request.user) | Q(assignees=request.user),
+        pk=pk,
     ).first()
     if not task:
         return Response({"ok": False, "error": "Tarefa não encontrada."}, status=404)
@@ -494,8 +503,8 @@ def subtask_toggle(request, pk):
         "task",
         "task__project"
     ).filter(
+        Q(task__project__members=request.user) | Q(task__assignees=request.user),
         pk=pk,
-        task__project__members=request.user
     ).first()
 
     if not subtask:
@@ -522,8 +531,8 @@ def subtask_toggle(request, pk):
 def comment_add(request, task_pk):
 
     task = Task.objects.select_related("project").filter(
+        Q(project__members=request.user) | Q(assignees=request.user),
         pk=task_pk,
-        project__members=request.user
     ).first()
 
     if not task:
@@ -548,8 +557,8 @@ def comment_add(request, task_pk):
 def api_report_issue(request, pk):
 
     task = Task.objects.select_related("project").filter(
+        Q(project__members=request.user) | Q(assignees=request.user),
         pk=pk,
-        project__members=request.user
     ).first()
 
     if not task:
@@ -601,8 +610,8 @@ def api_report_issue(request, pk):
 def api_pause_task(request, pk):
     """Alias de report-issue para o app mobile — aceita 'type' no lugar de 'reason'."""
     task = Task.objects.select_related("project").filter(
+        Q(project__members=request.user) | Q(assignees=request.user),
         pk=pk,
-        project__members=request.user
     ).first()
 
     if not task:
@@ -665,8 +674,8 @@ def api_edit_issue(request, issue_pk):
     issue = TaskIssue.objects.select_related(
         "task", "task__project"
     ).filter(
+        Q(task__project__members=request.user) | Q(task__assignees=request.user),
         pk=issue_pk,
-        task__project__members=request.user
     ).first()
 
     if not issue:
@@ -739,7 +748,8 @@ def api_resolve_issue(request, issue_pk):
 def api_resume_task(request, pk):
     """Retoma uma tarefa pausada (is_blocked). Apenas assignees podem retomar."""
     task = Task.objects.prefetch_related("assignees", "issues").filter(
-        pk=pk, project__members=request.user
+        Q(project__members=request.user) | Q(assignees=request.user),
+        pk=pk,
     ).first()
     if not task:
         return Response({"error": "Tarefa não encontrada."}, status=404)
@@ -768,8 +778,8 @@ def api_issue_comment_edit(request, comment_pk):
     from django.utils.html import escape
     from apps.tasks.models import IssueComment
     comment = IssueComment.objects.select_related("author", "issue__task__project").filter(
+        Q(issue__task__project__members=request.user) | Q(issue__task__assignees=request.user),
         pk=comment_pk,
-        issue__task__project__members=request.user
     ).first()
     if not comment:
         return Response({"error": "Comentário não encontrado."}, status=404)
@@ -795,8 +805,8 @@ def api_issue_comment_edit(request, comment_pk):
 def api_upload_attachment(request, pk):
 
     task = Task.objects.select_related("project").filter(
+        Q(project__members=request.user) | Q(assignees=request.user),
         pk=pk,
-        project__members=request.user
     ).first()
 
     if not task:
@@ -836,9 +846,9 @@ def api_upload_attachment(request, pk):
 def api_delete_attachment(request, pk, attachment_id):
 
     attachment = TaskAttachment.objects.select_related("task__project").filter(
+        Q(task__project__members=request.user) | Q(task__assignees=request.user),
         pk=attachment_id,
         task_id=pk,
-        task__project__members=request.user,
     ).first()
 
     if not attachment:
@@ -856,13 +866,14 @@ def api_delete_attachment(request, pk, attachment_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def api_download_attachment(request, attachment_id):
-    """Serve o arquivo somente para membros do projeto da tarefa — o /media/ cru
-    não tem checagem nenhuma de permissão, então isso não pode virar um link direto."""
+    """Serve o arquivo somente para membros do projeto da tarefa ou responsáveis (assignees)
+    pela tarefa — o /media/ cru não tem checagem nenhuma de permissão, então isso não pode
+    virar um link direto."""
     from django.http import FileResponse, Http404
 
     attachment = TaskAttachment.objects.select_related("task__project").filter(
+        Q(task__project__members=request.user) | Q(task__assignees=request.user),
         pk=attachment_id,
-        task__project__members=request.user,
     ).first()
 
     if not attachment or not attachment.file:
@@ -1028,7 +1039,10 @@ def _notify_task_members(task, actor, message):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def daily_report_list(request, task_pk):
-    task = Task.objects.filter(pk=task_pk, project__members=request.user).first()
+    task = Task.objects.filter(
+        Q(project__members=request.user) | Q(assignees=request.user),
+        pk=task_pk,
+    ).first()
     if not task:
         return Response({"error": "Tarefa não encontrada."}, status=404)
     reports = task.daily_reports.all()
@@ -1049,7 +1063,10 @@ def daily_report_list(request, task_pk):
 @permission_classes([IsAuthenticated])
 def daily_report_create(request, task_pk):
     from datetime import date as date_cls, timedelta
-    task = Task.objects.filter(pk=task_pk, project__members=request.user).first()
+    task = Task.objects.filter(
+        Q(project__members=request.user) | Q(assignees=request.user),
+        pk=task_pk,
+    ).first()
     if not task:
         return Response({"error": "Tarefa não encontrada."}, status=404)
 
@@ -1094,7 +1111,10 @@ def daily_report_create(request, task_pk):
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def daily_report_update(request, task_pk, report_pk):
-    task = Task.objects.filter(pk=task_pk, project__members=request.user).first()
+    task = Task.objects.filter(
+        Q(project__members=request.user) | Q(assignees=request.user),
+        pk=task_pk,
+    ).first()
     if not task:
         return Response({"error": "Tarefa não encontrada."}, status=404)
 
@@ -1132,7 +1152,6 @@ def register_push_token(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def performance_view(request):
-    from django.db.models import Q
     from datetime import timedelta
     user = request.user
     is_manager = user.role in ("owner", "admin", "manager")
