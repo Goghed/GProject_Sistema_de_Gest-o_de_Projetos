@@ -7,6 +7,20 @@
 @media (max-width: 900px) { .stat-grid { grid-template-columns:repeat(3,1fr); } }
 @media (max-width: 560px) { .stat-grid { grid-template-columns:repeat(2,1fr); } }
 @media (max-width: 420px) { .stat-grid { grid-template-columns:1fr; } }
+
+/* ── Projeto pausado: pisca na cor da cidade (Londrina=vermelho, Itu=âmbar) ── */
+@keyframes eq-pause-blink-londrina {
+  0%,100% { background: rgba(220,38,38,.12); }
+  50%     { background: rgba(220,38,38,.38); }
+}
+@keyframes eq-pause-blink-itu {
+  0%,100% { background: rgba(217,119,6,.12); }
+  50%     { background: rgba(217,119,6,.38); }
+}
+.eq-pause-londrina { animation: eq-pause-blink-londrina 1.1s ease-in-out infinite; border-left-color:#dc2626 !important; }
+.eq-pause-itu       { animation: eq-pause-blink-itu 1.1s ease-in-out infinite; border-left-color:#d97706 !important; }
+@keyframes eq-siren-blink { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+.eq-siren { cursor:help; font-size:11px; margin-left:5px; animation: eq-siren-blink .9s ease-in-out infinite; }
 </style>
 {% endblock %}
 {% block topbar_actions %}
@@ -78,6 +92,64 @@
 
 <!-- Popup flutuante do Gantt -->
 <div id="dg-popup" style="position:fixed;pointer-events:none;z-index:9999;background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px 14px;box-shadow:0 8px 30px rgba(0,0,0,.18);font-size:12px;min-width:180px;max-width:260px;opacity:0;transition:opacity .15s;"></div>
+
+<!-- Popup flutuante de projeto pausado (Equipes Técnicas) -->
+<div id="eq-pause-popup" style="position:fixed;pointer-events:none;z-index:9999;background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px 14px;box-shadow:0 8px 30px rgba(0,0,0,.18);font-size:12px;min-width:200px;max-width:280px;opacity:0;transition:opacity .15s;"></div>
+
+<script>
+function showPausePopup(el) {
+  const popup = document.getElementById('eq-pause-popup');
+  const project = el.dataset.project || 'Projeto';
+  const notesRaw = (el.dataset.notes || '').trim();
+  const notes = notesRaw ? notesRaw.split('@@@').map(s => {
+    const [note, date] = s.split('|||');
+    return { note: note || '', date: date || '' };
+  }) : [];
+
+  popup.innerHTML = '';
+  const title = document.createElement('div');
+  title.style.cssText = 'font-weight:700;margin-bottom:6px;color:var(--text)';
+  title.textContent = `🚨 ${project} — Pausado`;
+  popup.appendChild(title);
+
+  if (notes.length === 0) {
+    const p = document.createElement('div');
+    p.style.cssText = 'color:var(--text3);font-size:11px';
+    p.textContent = 'Sem motivo registrado.';
+    popup.appendChild(p);
+  } else {
+    notes.forEach((n, i) => {
+      const row = document.createElement('div');
+      row.style.cssText = i < notes.length - 1 ? 'margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border)' : '';
+      const noteEl = document.createElement('div');
+      noteEl.style.cssText = 'font-size:12px;color:var(--text2);line-height:1.4';
+      noteEl.textContent = n.note;
+      const dateEl = document.createElement('div');
+      dateEl.style.cssText = 'font-size:10px;color:var(--text3);margin-top:2px';
+      dateEl.textContent = n.date;
+      row.appendChild(noteEl);
+      row.appendChild(dateEl);
+      popup.appendChild(row);
+    });
+  }
+
+  popup.style.opacity = '1';
+  requestAnimationFrame(() => {
+    const r = el.getBoundingClientRect();
+    const ph = popup.offsetHeight, pw = popup.offsetWidth;
+    let top = r.top - ph - 10;
+    if (top < 8) top = r.bottom + 10;
+    let left = r.left + r.width / 2 - pw / 2;
+    if (left < 8) left = 8;
+    if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+  });
+}
+function hidePausePopup() {
+  document.getElementById('eq-pause-popup').style.opacity = '0';
+}
+</script>
 
 <style>
 /* ── Mini Gantt do Dashboard ─────────────────────────────────────── */

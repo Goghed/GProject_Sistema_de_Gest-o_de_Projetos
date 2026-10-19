@@ -70,8 +70,15 @@
     {% for atrib in atribs %}
     {% if atrib.posicao == 0 %}
     <!-- Atualmente -->
-    <div style="border-left:3px solid #22c55e;padding:8px 10px;background:#f0fdf4;border-radius:0 6px 6px 0">
-      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#16a34a;text-transform:uppercase;margin-bottom:5px">▶ Atualmente</div>
+    <div class="{% if atrib.projeto.status == 'on_hold' %}eq-pause-{{ atrib.projeto.cidade|default:'itu' }}{% endif %}" style="border-left:3px solid #22c55e;padding:8px 10px;background:#f0fdf4;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#16a34a;text-transform:uppercase;margin-bottom:5px;display:flex;align-items:center">
+        ▶ Atualmente
+        {% if atrib.projeto.status == 'on_hold' %}
+        <span class="eq-siren" data-project="{{ atrib.projeto.name }}"
+              data-notes="{% for n in atrib.projeto.pause_notes.all %}{{ n.note }}|||{{ n.created_at|date:'d/m/Y H:i' }}{% if not forloop.last %}@@@{% endif %}{% endfor %}"
+              onmouseenter="showPausePopup(this)" onmouseleave="hidePausePopup()">🚨</span>
+        {% endif %}
+      </div>
       {% if atrib.projeto %}
       <div style="font-size:12px;font-weight:600;color:#166534;margin-bottom:4px">{{ atrib.projeto.name }}</div>
       {% endif %}
@@ -88,8 +95,15 @@
     </div>
     {% elif atrib.posicao == 1 %}
     <!-- Fila 1 -->
-    <div style="border-left:3px solid #f59e0b;padding:8px 10px;background:#fffbeb;border-radius:0 6px 6px 0">
-      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#b45309;text-transform:uppercase;margin-bottom:5px">⏳ Fila 1</div>
+    <div class="{% if atrib.projeto.status == 'on_hold' %}eq-pause-{{ atrib.projeto.cidade|default:'itu' }}{% endif %}" style="border-left:3px solid #f59e0b;padding:8px 10px;background:#fffbeb;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#b45309;text-transform:uppercase;margin-bottom:5px;display:flex;align-items:center">
+        ⏳ Fila 1
+        {% if atrib.projeto.status == 'on_hold' %}
+        <span class="eq-siren" data-project="{{ atrib.projeto.name }}"
+              data-notes="{% for n in atrib.projeto.pause_notes.all %}{{ n.note }}|||{{ n.created_at|date:'d/m/Y H:i' }}{% if not forloop.last %}@@@{% endif %}{% endfor %}"
+              onmouseenter="showPausePopup(this)" onmouseleave="hidePausePopup()">🚨</span>
+        {% endif %}
+      </div>
       {% if atrib.projeto %}
       <div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:4px">{{ atrib.projeto.name }}</div>
       {% endif %}
@@ -106,8 +120,15 @@
     </div>
     {% elif atrib.posicao == 2 %}
     <!-- Fila 2 -->
-    <div style="border-left:3px solid #fb923c;padding:8px 10px;background:#fff7ed;border-radius:0 6px 6px 0">
-      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#c2410c;text-transform:uppercase;margin-bottom:5px">⏳ Fila 2</div>
+    <div class="{% if atrib.projeto.status == 'on_hold' %}eq-pause-{{ atrib.projeto.cidade|default:'itu' }}{% endif %}" style="border-left:3px solid #fb923c;padding:8px 10px;background:#fff7ed;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#c2410c;text-transform:uppercase;margin-bottom:5px;display:flex;align-items:center">
+        ⏳ Fila 2
+        {% if atrib.projeto.status == 'on_hold' %}
+        <span class="eq-siren" data-project="{{ atrib.projeto.name }}"
+              data-notes="{% for n in atrib.projeto.pause_notes.all %}{{ n.note }}|||{{ n.created_at|date:'d/m/Y H:i' }}{% if not forloop.last %}@@@{% endif %}{% endfor %}"
+              onmouseenter="showPausePopup(this)" onmouseleave="hidePausePopup()">🚨</span>
+        {% endif %}
+      </div>
       {% if atrib.projeto %}
       <div style="font-size:12px;font-weight:600;color:#9a3412;margin-bottom:4px">{{ atrib.projeto.name }}</div>
       {% endif %}
@@ -124,8 +145,15 @@
     </div>
     {% elif atrib.posicao == 3 %}
     <!-- Fila 3 -->
-    <div style="border-left:3px solid #94a3b8;padding:8px 10px;background:#f8fafc;border-radius:0 6px 6px 0">
-      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748b;text-transform:uppercase;margin-bottom:5px">⏳ Fila 3</div>
+    <div class="{% if atrib.projeto.status == 'on_hold' %}eq-pause-{{ atrib.projeto.cidade|default:'itu' }}{% endif %}" style="border-left:3px solid #94a3b8;padding:8px 10px;background:#f8fafc;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748b;text-transform:uppercase;margin-bottom:5px;display:flex;align-items:center">
+        ⏳ Fila 3
+        {% if atrib.projeto.status == 'on_hold' %}
+        <span class="eq-siren" data-project="{{ atrib.projeto.name }}"
+              data-notes="{% for n in atrib.projeto.pause_notes.all %}{{ n.note }}|||{{ n.created_at|date:'d/m/Y H:i' }}{% if not forloop.last %}@@@{% endif %}{% endfor %}"
+              onmouseenter="showPausePopup(this)" onmouseleave="hidePausePopup()">🚨</span>
+        {% endif %}
+      </div>
       {% if atrib.projeto %}
       <div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:4px">{{ atrib.projeto.name }}</div>
       {% endif %}
