@@ -27,7 +27,7 @@ html, body { height: 100%; font-family: var(--dm); background: var(--surface); c
 a { color: var(--accent); text-decoration: none; }
 
 /* ── Shell ── */
-.shell { display: flex; height: 100vh; overflow: hidden; }
+.shell { display: flex; height: 100vh; overflow: hidden; position: relative; }
 
 /* ── Sidebar ── */
 .sidebar {
@@ -35,6 +35,25 @@ a { color: var(--accent); text-decoration: none; }
   background: var(--ink);
   display: flex; flex-direction: column;
   position: relative; overflow: hidden;
+  transition: width .2s ease, min-width .2s ease;
+}
+.shell.sb-collapsed .sidebar { width: 0; min-width: 0; }
+
+/* Botão de esconder/mostrar o menu lateral (desktop) */
+.sb-toggle-btn {
+  position: absolute; top: 18px; left: 219px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--white); border: 1px solid var(--border2); color: var(--text2);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  z-index: 50; transition: left .2s ease, background .15s, color .15s;
+  box-shadow: var(--shadow);
+}
+.sb-toggle-btn:hover { background: var(--surface2); color: var(--accent); }
+.sb-toggle-btn svg { transition: transform .2s ease; }
+.shell.sb-collapsed .sb-toggle-btn { left: 8px; }
+.shell.sb-collapsed .sb-toggle-btn svg { transform: rotate(180deg); }
+@media (max-width: 768px) {
+  .sb-toggle-btn { display: none; }
 }
 .sidebar::after {
   content: ''; position: absolute; bottom: -80px; right: -80px;
@@ -345,6 +364,9 @@ body.dark-mode .form-control { background:var(--surface2); color:var(--text); bo
       <a href="{% url 'accounts:logout' %}" class="sb-logout" title="Sair">⏻</a>
     </div>
   </aside>
+  <button class="sb-toggle-btn" id="sidebar-toggle-btn" title="Esconder/mostrar menu">
+    <svg width="12" height="12" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 2.5L4 7.5l5.5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
   <!-- Main -->
@@ -392,6 +414,22 @@ body.dark-mode .form-control { background:var(--surface2); color:var(--text); bo
   });
   window.addEventListener('resize', function() {
     if (window.innerWidth > 768) closeSidebar();
+  });
+})();
+
+// ── Esconder/mostrar menu lateral (desktop), lembrando a preferência ──────────
+(function() {
+  const shell = document.querySelector('.shell');
+  const btn   = document.getElementById('sidebar-toggle-btn');
+  if (!shell || !btn) return;
+
+  let collapsed = false;
+  try { collapsed = localStorage.getItem('sb_collapsed') === '1'; } catch {}
+  if (collapsed) shell.classList.add('sb-collapsed');
+
+  btn.addEventListener('click', function() {
+    shell.classList.toggle('sb-collapsed');
+    try { localStorage.setItem('sb_collapsed', shell.classList.contains('sb-collapsed') ? '1' : '0'); } catch {}
   });
 })();
 
