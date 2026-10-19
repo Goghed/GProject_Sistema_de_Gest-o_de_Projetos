@@ -397,8 +397,11 @@ class EquipeReorderTests(TestCase):
 
     def test_swap_promotes_queued_project_to_current(self):
         resp = self.client.post(
-            reverse("projects:equipe_reorder", args=[self.equipe.pk]),
-            data=json.dumps({"from_posicao": 1, "to_posicao": 0}),
+            reverse("projects:equipe_reorder"),
+            data=json.dumps({
+                "from_equipe": str(self.equipe.pk), "from_posicao": 1,
+                "to_equipe": str(self.equipe.pk), "to_posicao": 0,
+            }),
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 200, resp.content)
@@ -416,11 +419,32 @@ class EquipeReorderTests(TestCase):
         self.equipe.save(update_fields=["tecnico_user"])
 
         self.client.post(
-            reverse("projects:equipe_reorder", args=[self.equipe.pk]),
-            data=json.dumps({"from_posicao": 1, "to_posicao": 0}),
+            reverse("projects:equipe_reorder"),
+            data=json.dumps({
+                "from_equipe": str(self.equipe.pk), "from_posicao": 1,
+                "to_equipe": str(self.equipe.pk), "to_posicao": 0,
+            }),
             content_type="application/json",
         )
         self.assertIn(tech, self.p1.members.all())
+
+    def test_drag_to_a_different_team_moves_project_across_teams(self):
+        other_equipe = EquipeTecnica.objects.create(tecnico="Outro Tecnico")
+        resp = self.client.post(
+            reverse("projects:equipe_reorder"),
+            data=json.dumps({
+                "from_equipe": str(self.equipe.pk), "from_posicao": 0,
+                "to_equipe": str(other_equipe.pk), "to_posicao": 0,
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertTrue(resp.json()["ok"])
+
+        self.assertFalse(AtribuicaoEquipe.objects.filter(equipe=self.equipe, posicao=0).exists())
+        moved = AtribuicaoEquipe.objects.get(equipe=other_equipe, posicao=0)
+        self.assertEqual(moved.projeto, self.p0)
+        self.assertEqual(moved.tipo_instalacao, "Retrofit")
 
 
 class ProjectPauseResumeTests(TestCase):

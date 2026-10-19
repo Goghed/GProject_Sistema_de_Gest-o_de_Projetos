@@ -26,6 +26,10 @@
        style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if status_filter == 'active' %}#059669{% else %}var(--border2){% endif %};{% if status_filter == 'active' %}background:#059669;color:#fff;{% else %}color:#059669;{% endif %}">
       Ativos
     </a>
+    <a href="?{% if cidade_filter %}cidade={{ cidade_filter }}&{% endif %}status=on_hold"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if status_filter == 'on_hold' %}#d97706{% else %}var(--border2){% endif %};{% if status_filter == 'on_hold' %}background:#d97706;color:#fff;{% else %}color:#d97706;{% endif %}">
+      Pausados
+    </a>
     <a href="?{% if cidade_filter %}cidade={{ cidade_filter }}&{% endif %}status=completed"
        style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if status_filter == 'completed' %}#5b4cf5{% else %}var(--border2){% endif %};{% if status_filter == 'completed' %}background:#5b4cf5;color:#fff;{% else %}color:#5b4cf5;{% endif %}">
       Concluídos

@@ -1297,21 +1297,26 @@ function hidePausePopup() {
 }
 
 /* ── Arrastar-e-soltar dos slots no card (muda na hora, via API) ──────────── */
-async function reorderSlots(equipeId, fromPos, toPos) {
+async function reorderSlots(fromEquipeId, fromPos, toEquipeId, toPos) {
   try {
-    const res = await fetch(`/dashboard/equipes/${equipeId}/reorder/`, {
+    const res = await fetch(`/dashboard/equipes/reorder/`, {
       method: 'POST',
       headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from_posicao: Number(fromPos), to_posicao: Number(toPos) }),
+      body: JSON.stringify({
+        from_equipe: fromEquipeId, from_posicao: Number(fromPos),
+        to_equipe: toEquipeId, to_posicao: Number(toPos),
+      }),
     });
     const data = await res.json();
-    if (!data.ok) { alert(data.error || 'Erro ao reordenar.'); return; }
+    if (!data.ok) { alert(data.error || 'Erro ao mover.'); return; }
     location.reload();
   } catch {
-    alert('Erro de conexão ao reordenar.');
+    alert('Erro de conexão ao mover.');
   }
 }
 
+/* Arrasta um slot pra qualquer outro — dentro da mesma equipe (reordena a
+   fila) ou pra equipe de outro técnico (manda o projeto pra ele). */
 (function setupCardDragDrop() {
   let dragSrc = null;
   document.querySelectorAll('.eq-slot[data-equipe]').forEach(slot => {
@@ -1325,7 +1330,7 @@ async function reorderSlots(equipeId, fromPos, toPos) {
       slot.addEventListener('dragend', () => slot.classList.remove('eq-slot-dragging'));
     }
     slot.addEventListener('dragover', e => {
-      if (!dragSrc || dragSrc.dataset.equipe !== slot.dataset.equipe) return;
+      if (!dragSrc) return;
       e.preventDefault();
       slot.classList.add('eq-slot-dragover');
     });
@@ -1334,11 +1339,7 @@ async function reorderSlots(equipeId, fromPos, toPos) {
       e.preventDefault();
       slot.classList.remove('eq-slot-dragover');
       if (!dragSrc || dragSrc === slot) return;
-      if (dragSrc.dataset.equipe !== slot.dataset.equipe) {
-        alert('Só é possível reordenar dentro da mesma equipe.');
-        return;
-      }
-      reorderSlots(slot.dataset.equipe, dragSrc.dataset.posicao, slot.dataset.posicao);
+      reorderSlots(dragSrc.dataset.equipe, dragSrc.dataset.posicao, slot.dataset.equipe, slot.dataset.posicao);
     });
   });
 })();

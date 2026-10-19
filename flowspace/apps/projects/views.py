@@ -514,40 +514,49 @@ def equipes_view(request):
 
 @login_required
 @require_POST
-def equipe_reorder(request, equipe_id):
+def equipe_reorder(request):
     """Arrastar-e-soltar: troca o projeto (e todos os dados do slot) entre
-    duas posições da fila de uma equipe — usado tanto pelo card quanto pelo
-    modal 'Gerenciar Fila'."""
+    duas posições — dentro da mesma equipe (reordenar a fila) ou entre
+    equipes diferentes (mandar o projeto de um técnico pro outro). Usado
+    pelos cards da página de Equipes."""
     if not request.user.can_manage:
         return JsonResponse({"ok": False, "error": "Sem permissão."}, status=403)
     try:
         data = json.loads(request.body)
         from_pos = int(data.get("from_posicao"))
         to_pos   = int(data.get("to_posicao"))
+        from_equipe_id = data.get("from_equipe")
+        to_equipe_id   = data.get("to_equipe")
     except (TypeError, ValueError, json.JSONDecodeError):
         return JsonResponse({"ok": False, "error": "Dados inválidos."}, status=400)
-    if from_pos == to_pos or from_pos not in range(4) or to_pos not in range(4):
-        return JsonResponse({"ok": False, "error": "Posições inválidas."}, status=400)
+    if from_pos not in range(4) or to_pos not in range(4) or not from_equipe_id or not to_equipe_id:
+        return JsonResponse({"ok": False, "error": "Dados inválidos."}, status=400)
+    if from_equipe_id == to_equipe_id and from_pos == to_pos:
+        return JsonResponse({"ok": False, "error": "Nada para mover."}, status=400)
 
-    equipe = get_object_or_404(EquipeTecnica, pk=equipe_id)
+    from_equipe = get_object_or_404(EquipeTecnica, pk=from_equipe_id)
+    to_equipe   = get_object_or_404(EquipeTecnica, pk=to_equipe_id)
+
     FIELDS = ["projeto", "tipo_instalacao", "varejo_projeto", "dias_execucao", "data_inicio", "data_termino"]
-    a_from = AtribuicaoEquipe.objects.filter(equipe=equipe, posicao=from_pos).first()
-    a_to   = AtribuicaoEquipe.objects.filter(equipe=equipe, posicao=to_pos).first()
+    a_from = AtribuicaoEquipe.objects.filter(equipe=from_equipe, posicao=from_pos).first()
+    a_to   = AtribuicaoEquipe.objects.filter(equipe=to_equipe, posicao=to_pos).first()
     vals_from = {f: getattr(a_from, f) for f in FIELDS} if a_from else None
     vals_to   = {f: getattr(a_to, f) for f in FIELDS} if a_to else None
 
-    def _apply(pos, vals):
+    def _apply(equipe, pos, vals):
         if vals is None:
             AtribuicaoEquipe.objects.filter(equipe=equipe, posicao=pos).delete()
         else:
             AtribuicaoEquipe.objects.update_or_create(equipe=equipe, posicao=pos, defaults=vals)
 
-    _apply(from_pos, vals_to)
-    _apply(to_pos, vals_from)
+    _apply(from_equipe, from_pos, vals_to)
+    _apply(to_equipe, to_pos, vals_from)
 
     # Mesmo comportamento do save_fila: quem assume o slot "Atualmente" tem
     # a equipe auto-adicionada como membro do projeto.
-    if from_pos == 0 or to_pos == 0:
+    for equipe, pos in ((from_equipe, from_pos), (to_equipe, to_pos)):
+        if pos != 0:
+            continue
         atual = AtribuicaoEquipe.objects.filter(equipe=equipe, posicao=0, projeto__isnull=False).select_related("projeto").first()
         if atual:
             atual.projeto.members.add(*equipe.membros_sistema())
@@ -640,13 +649,15 @@ def project_list(request):
     if cidade_filter not in ("londrina", "itu"):
         cidade_filter = ""
     status_filter = request.GET.get("status", "").strip().lower()
-    if status_filter not in ("active", "completed"):
+    if status_filter not in ("active", "on_hold", "completed"):
         status_filter = ""
     projects = Project.objects.order_by("-updated_at")
     if cidade_filter:
         projects = projects.filter(cidade=cidade_filter)
     if status_filter == "active":
-        projects = projects.filter(status__in=["active", "on_hold"])
+        projects = projects.filter(status="active")
+    elif status_filter == "on_hold":
+        projects = projects.filter(status="on_hold")
     elif status_filter == "completed":
         projects = projects.filter(status="completed")
     return render(request, "projects/list.html", {
