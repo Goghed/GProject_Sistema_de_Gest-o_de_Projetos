@@ -173,6 +173,13 @@ function hidePausePopup() {
 #dg-table .dg-sq.dg-sq-blocked { animation:dg-pulse-blocked 1.4s ease-in-out infinite; }
 .dg-today-line { position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--accent);opacity:.4;pointer-events:none; }
 
+/* Linha inteira do projeto fica amarela quando o projeto está pausado */
+@keyframes dg-row-paused-blink {
+  0%,100% { background:rgba(217,119,6,.14) !important; }
+  50%      { background:rgba(217,119,6,.32) !important; }
+}
+#dg-table .dg-row-paused { animation:dg-row-paused-blink 1.3s ease-in-out infinite; }
+
 </style>
 
 <script>
@@ -294,7 +301,7 @@ function hidePausePopup() {
       });
 
       /* Coluna do nome */
-      const nameCell=mk("div","dg-name-cell");
+      const nameCell=mk("div", row.is_paused ? "dg-name-cell dg-row-paused" : "dg-name-cell");
       const dot=mk("div"); dot.style.cssText=`width:8px;height:8px;border-radius:50%;background:${row.color};flex-shrink:0`;
       const link=document.createElement("a");
       link.href=row.proj_url;
@@ -302,12 +309,18 @@ function hidePausePopup() {
       link.textContent=row.name;
       nameCell.appendChild(dot);
       nameCell.appendChild(link);
+      if(row.is_paused){
+        const siren=mk("span","",'🚨'); siren.style.cssText="font-size:13px;flex-shrink:0;animation:eq-siren-blink .9s ease-in-out infinite";
+        siren.title="Projeto pausado";
+        nameCell.appendChild(siren);
+      }
       table.appendChild(nameCell);
 
       /* Células dos dias */
       days.forEach(d=>{
         const ymd=toYMD(d), dow=d.getUTCDay();
         let cls="dg-sq-cell";
+        if(row.is_paused) cls+=" dg-row-paused";
         if(ymd===TODAY_STR) cls+=" dg-today";
         else if(dow===0||dow===6) cls+=" dg-weekend";
         const cell=mk("div",cls);

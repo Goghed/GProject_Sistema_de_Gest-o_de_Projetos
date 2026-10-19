@@ -117,10 +117,11 @@ def _build_gantt_rows(proj_list, today):
                 "is_blocked":     t.is_blocked,
             })
         gantt_rows.append({
-            "name":     p.name,
-            "proj_url": f"/dashboard/projects/{p.pk}/",
-            "color":    p.color,
-            "tasks":    gd_tasks,
+            "name":       p.name,
+            "proj_url":   f"/dashboard/projects/{p.pk}/",
+            "color":      p.color,
+            "tasks":      gd_tasks,
+            "is_paused":  p.status == "on_hold",
         })
     return gantt_rows, gantt_dash_start, gantt_dash_end
 
