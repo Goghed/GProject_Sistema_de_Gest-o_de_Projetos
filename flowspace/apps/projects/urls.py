@@ -24,5 +24,6 @@ urlpatterns = [
     path("insights/",                         views.insights,           name="insights"),
     path("equipes/",                          views.equipes_view,        name="equipes"),
     path("equipes/<uuid:equipe_id>/reorder/", views.equipe_reorder,      name="equipe_reorder"),
+    path("equipes/<uuid:equipe_id>/slot/<int:posicao>/save/", views.equipe_save_slot, name="equipe_save_slot"),
     path("stats.json",                        views.dashboard_stats_json, name="stats_json"),
 ]

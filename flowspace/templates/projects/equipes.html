@@ -755,6 +755,12 @@
               <option value="{{ p.pk }}" style="color:{{ p.color }};font-weight:600">● {{ p.name }}</option>
               {% endfor %}
             </select>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+              <button type="button" class="eq-btn" style="flex:none;padding:4px 10px" onclick="saveFilaSlot({{ pos }})">
+                💾 Salvar só este
+              </button>
+              <span id="s{{ pos }}_save_status" style="font-size:11px;color:#059669;font-weight:600"></span>
+            </div>
           </div>
           <div class="form-grid-2" style="margin-bottom:10px">
             <div class="form-group" style="margin-bottom:0">
@@ -928,6 +934,68 @@ function openFilaModal(equipeId, equipeName, slots) {
 function setVal(id, val) {
   const el = document.getElementById(id);
   if (el) el.value = val;
+}
+
+/* ── Calcula "Data término" = "Data início" + dias de execução ────────────── */
+function recalcTermino(pos) {
+  const iniEl   = document.getElementById(`s${pos}_inicio`);
+  const diasEl  = document.getElementById(`s${pos}_dias`);
+  const termEl  = document.getElementById(`s${pos}_termino`);
+  if (!iniEl.value) return;
+  const match = diasEl.value.match(/\d+/);
+  if (!match) return;
+  const dias = parseInt(match[0], 10);
+  if (!dias || dias < 1) return;
+  const [y, m, d] = iniEl.value.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + dias - 1);
+  termEl.value = dt.toISOString().slice(0, 10);
+}
+
+(function setupAutoTermino() {
+  for (let pos = 0; pos < 4; pos++) {
+    const iniEl  = document.getElementById(`s${pos}_inicio`);
+    const diasEl = document.getElementById(`s${pos}_dias`);
+    if (!iniEl || !diasEl) continue;
+    iniEl.addEventListener('change', () => recalcTermino(pos));
+    diasEl.addEventListener('change', () => recalcTermino(pos));
+    diasEl.addEventListener('blur',   () => recalcTermino(pos));
+  }
+})();
+
+/* ── Salva só um slot (sem submeter o formulário inteiro) ─────────────────── */
+async function saveFilaSlot(pos) {
+  const equipeId = document.getElementById('fila-equipe-id').value;
+  const statusEl = document.getElementById(`s${pos}_save_status`);
+  const body = new URLSearchParams({
+    projeto: document.getElementById(`s${pos}_projeto`).value,
+    tipo:    document.getElementById(`s${pos}_tipo`).value,
+    varejo:  document.getElementById(`s${pos}_varejo`).value,
+    dias:    document.getElementById(`s${pos}_dias`).value,
+    inicio:  document.getElementById(`s${pos}_inicio`).value,
+    termino: document.getElementById(`s${pos}_termino`).value,
+  });
+  if (statusEl) statusEl.textContent = 'Salvando...';
+  try {
+    const res = await fetch(`/dashboard/equipes/${equipeId}/slot/${pos}/save/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      if (statusEl) statusEl.textContent = '';
+      alert(data.error || 'Erro ao salvar.');
+      return;
+    }
+    if (statusEl) {
+      statusEl.textContent = '✓ Salvo';
+      setTimeout(() => { statusEl.textContent = ''; }, 2500);
+    }
+  } catch {
+    if (statusEl) statusEl.textContent = '';
+    alert('Erro de conexão ao salvar.');
+  }
 }
 
 function deleteEquipe(id, name) {

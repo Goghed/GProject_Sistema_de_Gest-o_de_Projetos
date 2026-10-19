@@ -535,6 +535,40 @@ def project_resume(request, pk):
 
 
 @login_required
+@require_POST
+def equipe_save_slot(request, equipe_id, posicao):
+    """Salva um único slot da fila (sem precisar submeter o formulário
+    inteiro) — mesma lógica por posição que 'save_fila', só que via AJAX."""
+    if not request.user.can_manage:
+        return JsonResponse({"ok": False, "error": "Sem permissão."}, status=403)
+    if posicao not in range(4):
+        return JsonResponse({"ok": False, "error": "Posição inválida."}, status=400)
+
+    equipe = get_object_or_404(EquipeTecnica, pk=equipe_id)
+    projeto_id = request.POST.get("projeto") or None
+    tipo    = request.POST.get("tipo", "").strip()
+    varejo  = request.POST.get("varejo", "").strip()
+    dias    = request.POST.get("dias", "").strip()
+    d_ini   = request.POST.get("inicio") or None
+    d_fim   = request.POST.get("termino") or None
+    projeto = Project.objects.filter(pk=projeto_id).first() if projeto_id else None
+
+    if any([projeto, tipo, varejo, dias, d_ini, d_fim]):
+        AtribuicaoEquipe.objects.update_or_create(
+            equipe=equipe, posicao=posicao,
+            defaults=dict(projeto=projeto, tipo_instalacao=tipo,
+                          varejo_projeto=varejo, dias_execucao=dias,
+                          data_inicio=d_ini, data_termino=d_fim),
+        )
+        if projeto:
+            projeto.members.add(*equipe.membros_sistema())
+    else:
+        AtribuicaoEquipe.objects.filter(equipe=equipe, posicao=posicao).delete()
+
+    return JsonResponse({"ok": True})
+
+
+@login_required
 def project_list(request):
     cidade_filter = request.GET.get("cidade", "").strip().lower()
     if cidade_filter not in ("londrina", "itu"):
