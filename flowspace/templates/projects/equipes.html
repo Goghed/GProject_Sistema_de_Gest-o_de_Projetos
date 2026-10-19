@@ -491,27 +491,34 @@
     </div>
     {% endif %}
 
+    <!-- Fila 4+ (sem limite, adicionados via Criar Projeto quando a fila 0-3 já estava cheia) -->
+    {% if item.slots_extra %}
+    <div class="eq-slot-extra-list" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border2)">
+      {% for extra in item.slots_extra %}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 11px;font-size:11px;color:var(--text2)">
+        <span style="display:flex;align-items:center;gap:6px;min-width:0">
+          {% if extra.projeto.color %}<span class="eq-proj-dot" style="background:{{ extra.projeto.color }};flex-shrink:0"></span>{% endif %}
+          <span style="white-space:nowrap">⏳ {{ extra.posicao_label }} —</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ extra.projeto.name|default:"—" }}</span>
+        </span>
+        <button type="button" class="eq-btn eq-btn-danger" style="flex-shrink:0;padding:2px 6px;font-size:10px"
+                title="Remover da fila" onclick="removeExtraFila('{{ extra.pk }}', this)">✕</button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
   </div>
 
   <!-- Actions -->
   <div class="eq-actions">
     <button class="eq-btn"
             data-pk="{{ item.obj.pk }}"
-            data-tecnico="{{ item.obj.tecnico|escapejs }}"
-            data-tecnico-user="{{ item.tecnico_user_id }}"
-            data-auxiliar="{{ item.obj.auxiliar|escapejs }}"
-            data-auxiliar-user="{{ item.auxiliar_user_id }}"
-            data-veiculo="{{ item.obj.veiculo|escapejs }}"
-            data-placa="{{ item.obj.placa|escapejs }}"
-            data-ordem="{{ item.obj.ordem }}"
             data-status="{{ item.obj.status }}"
-            data-foto="{% if item.obj.foto %}{{ item.obj.foto.url }}{% endif %}"
-            data-foto-auxiliar="{% if item.obj.foto_auxiliar %}{{ item.obj.foto_auxiliar.url }}{% endif %}"
-            data-cidade="{{ item.obj.cidade }}"
-            data-aux-extra='{{ item.auxiliares_extra_json|safe }}'
-            onclick="openEditModalFromBtn(this)">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-      Editar
+            title="Técnico, auxiliares, foto e veículo agora são editados na tela de Criar Projeto"
+            onclick="openStatusModalFromBtn(this)">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      Status
     </button>
     <button class="eq-btn eq-btn-fila"
             data-id="{{ item.obj.pk }}"
@@ -653,105 +660,23 @@
 </div>
 
 
-<!-- ── Modal: Editar Equipe ───────────────────────────────────────────────── -->
+<!-- ── Modal: Status da Equipe ────────────────────────────────────────────── -->
 <div class="modal-overlay" id="edit-modal">
-  <div class="modal-box" style="max-width:460px">
+  <div class="modal-box" style="max-width:360px">
     <div class="modal-header">
       <div class="modal-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="margin-right:6px;vertical-align:middle"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Editar Equipe
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="margin-right:6px;vertical-align:middle"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Status da Equipe
       </div>
       <button class="modal-close" onclick="document.getElementById('edit-modal').classList.remove('open')">✕</button>
     </div>
-    <form method="post" enctype="multipart/form-data">
+    <p style="font-size:12px;color:var(--text3);margin-bottom:16px;margin-top:-10px">Técnico, auxiliares, foto e veículo são editados na tela de Criar Projeto.</p>
+    <form method="post">
       {% csrf_token %}
-      <input type="hidden" name="action" value="edit_equipe">
+      <input type="hidden" name="action" value="update_status">
       <input type="hidden" name="equipe_id" id="edit-equipe-id">
       <input type="hidden" name="cidade_filter" value="{{ cidade_filter }}">
 
-      <div class="form-group">
-        <label class="form-label">Foto do Técnico</label>
-        <div style="display:flex;align-items:center;gap:12px">
-          <div id="edit-foto-preview" style="width:56px;height:56px;border-radius:12px;background:var(--surface2);border:2px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;overflow:hidden">📷</div>
-          <label style="flex:1;cursor:pointer">
-            <div class="form-control" style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text3)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              <span id="edit-foto-label">Selecionar imagem...</span>
-            </div>
-            <input type="file" name="foto" id="edit-foto" accept="image/*" style="display:none" onchange="previewFoto(this,'edit-foto-preview','edit-foto-label')">
-          </label>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Técnico — usuário do sistema</label>
-        <select name="tecnico_user_id" id="edit-tecnico-user" class="form-control" onchange="autoFillName(this,'edit-tecnico')">
-          <option value="">— Selecionar usuário (opcional) —</option>
-          {% for u in all_users %}<option value="{{ u.pk }}" data-name="{{ u.get_full_name|default:u.username }}">{{ u.get_full_name|default:u.username }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Nome de exibição do técnico *</label>
-        <input type="text" name="tecnico" id="edit-tecnico" class="form-control" required>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Auxiliar — usuário do sistema</label>
-        <select name="auxiliar_user_id" id="edit-auxiliar-user" class="form-control" onchange="autoFillName(this,'edit-auxiliar')">
-          <option value="">— Selecionar usuário (opcional) —</option>
-          {% for u in all_users %}<option value="{{ u.pk }}" data-name="{{ u.get_full_name|default:u.username }}">{{ u.get_full_name|default:u.username }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Nome de exibição do auxiliar</label>
-        <input type="text" name="auxiliar" id="edit-auxiliar" class="form-control">
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Foto do Auxiliar</label>
-        <div style="display:flex;align-items:center;gap:12px">
-          <div id="edit-foto-auxiliar-preview" style="width:56px;height:56px;border-radius:12px;background:var(--surface2);border:2px dashed var(--border2);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;overflow:hidden">📷</div>
-          <label style="flex:1;cursor:pointer">
-            <div class="form-control" style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text3)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              <span id="edit-foto-auxiliar-label">Selecionar imagem...</span>
-            </div>
-            <input type="file" name="foto_auxiliar" id="edit-foto-auxiliar" accept="image/*" style="display:none" onchange="previewFoto(this,'edit-foto-auxiliar-preview','edit-foto-auxiliar-label')">
-          </label>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Auxiliares extras</label>
-        <input type="hidden" name="aux_count" id="edit-aux-count" value="0">
-        <div id="edit-aux-extra-list"></div>
-        <button type="button" class="eq-btn" style="width:100%;justify-content:center" onclick="addAuxRow('edit')">
-          + Adicionar auxiliar
-        </button>
-      </div>
-
-      <div class="form-grid-2">
-        <div class="form-group">
-          <label class="form-label">Veículo</label>
-          <input type="text" name="veiculo" id="edit-veiculo" class="form-control">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Placa</label>
-          <input type="text" name="placa" id="edit-placa" class="form-control" maxlength="10" style="text-transform:uppercase">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Ordem de exibição</label>
-          <input type="number" name="ordem" id="edit-ordem" class="form-control" min="0">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Cidade</label>
-          <select name="cidade" id="edit-cidade" class="form-control">
-            <option value="">— Sem cidade —</option>
-            <option value="londrina">Londrina</option>
-            <option value="itu">Itu</option>
-          </select>
-        </div>
-      </div>
       <div class="form-group">
         <label class="form-label">Status</label>
         <div style="display:flex;gap:12px;margin-top:4px">
@@ -770,7 +695,7 @@
         </div>
       </div>
       <div style="display:flex;gap:8px;margin-top:6px">
-        <button type="submit" class="btn btn-primary" style="flex:1">Salvar Alterações</button>
+        <button type="submit" class="btn btn-primary" style="flex:1">Salvar Status</button>
         <button type="button" class="btn btn-ghost" onclick="document.getElementById('edit-modal').classList.remove('open')">Cancelar</button>
       </div>
     </form>
@@ -991,54 +916,13 @@ function autoFillName(sel, targetId) {
   }
 }
 
-function openEditModalFromBtn(btn) {
-  const status   = btn.dataset.status || 'ativa';
-  const fotoUrl  = btn.dataset.foto;
-  const fotoAuxiliarUrl = btn.dataset.fotoAuxiliar;
-  const preview  = document.getElementById('edit-foto-preview');
-  const label    = document.getElementById('edit-foto-label');
-  const previewAux = document.getElementById('edit-foto-auxiliar-preview');
-  const labelAux   = document.getElementById('edit-foto-auxiliar-label');
-  document.getElementById('edit-equipe-id').value    = btn.dataset.pk;
-  document.getElementById('edit-tecnico').value      = btn.dataset.tecnico;
-  document.getElementById('edit-auxiliar').value     = btn.dataset.auxiliar;
-  document.getElementById('edit-veiculo').value      = btn.dataset.veiculo;
-  document.getElementById('edit-placa').value        = btn.dataset.placa;
-  document.getElementById('edit-ordem').value        = btn.dataset.ordem;
-  document.getElementById('edit-status-ativa').checked   = status === 'ativa';
-  document.getElementById('edit-status-inativa').checked = status === 'inativa';
-  document.getElementById('edit-status-ferias').checked  = status === 'ferias';
-  document.getElementById('edit-foto').value         = '';
-  document.getElementById('edit-foto-auxiliar').value = '';
-  setSelectVal('edit-tecnico-user',  btn.dataset.tecnicoUser);
-  setSelectVal('edit-auxiliar-user', btn.dataset.auxiliarUser);
-  setSelectVal('edit-cidade', btn.dataset.cidade || '');
-  if (fotoUrl) {
-    preview.innerHTML = `<img src="${fotoUrl}" style="width:100%;height:100%;object-fit:cover">`;
-    label.textContent = 'Foto atual (selecionar para alterar)';
-  } else {
-    preview.innerHTML = '📷';
-    label.textContent = 'Selecionar imagem...';
-  }
-  if (fotoAuxiliarUrl) {
-    previewAux.innerHTML = `<img src="${fotoAuxiliarUrl}" style="width:100%;height:100%;object-fit:cover">`;
-    labelAux.textContent = 'Foto atual (selecionar para alterar)';
-  } else {
-    previewAux.innerHTML = '📷';
-    labelAux.textContent = 'Selecionar imagem...';
-  }
-  resetAuxRows('edit');
-  try {
-    const auxExtra = JSON.parse(btn.dataset.auxExtra || '[]');
-    auxExtra.forEach(a => addAuxRow('edit', a));
-  } catch { /* lista vazia ou inválida — segue sem auxiliares extras */ }
+function openStatusModalFromBtn(btn) {
+  const status = btn.dataset.status || 'ativa';
+  document.getElementById('edit-equipe-id').value        = btn.dataset.pk;
+  document.getElementById('edit-status-ativa').checked    = status === 'ativa';
+  document.getElementById('edit-status-inativa').checked  = status === 'inativa';
+  document.getElementById('edit-status-ferias').checked   = status === 'ferias';
   document.getElementById('edit-modal').classList.add('open');
-}
-
-function setSelectVal(id, val) {
-  const sel = document.getElementById(id);
-  if (!sel) return;
-  sel.value = val || '';
 }
 
 function openFilaModalFromBtn(btn) {
@@ -1127,7 +1011,16 @@ function setVal(id, val) {
   if (el) el.value = val;
 }
 
-/* ── Calcula "Data término" = "Data início" + dias de execução ────────────── */
+/* ── Calcula "Data término" = "Data início" + dias de execução (úteis, pula sáb/dom) ─ */
+function addBusinessDays(dt, dias) {
+  let added = 0;
+  while (added < dias) {
+    const dow = dt.getUTCDay();
+    if (dow !== 0 && dow !== 6) added++;
+    if (added < dias) dt.setUTCDate(dt.getUTCDate() + 1);
+  }
+  return dt;
+}
 function recalcTermino(pos) {
   const iniEl   = document.getElementById(`s${pos}_inicio`);
   const diasEl  = document.getElementById(`s${pos}_dias`);
@@ -1138,8 +1031,7 @@ function recalcTermino(pos) {
   const dias = parseInt(match[0], 10);
   if (!dias || dias < 1) return;
   const [y, m, d] = iniEl.value.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + dias - 1);
+  const dt = addBusinessDays(new Date(Date.UTC(y, m - 1, d)), dias);
   termEl.value = dt.toISOString().slice(0, 10);
 }
 
@@ -1239,6 +1131,21 @@ async function resumeProject(projectId) {
     location.reload();
   } catch {
     alert('Erro de conexão ao retomar projeto.');
+  }
+}
+
+async function removeExtraFila(atribuicaoId, btn) {
+  if (!confirm('Remover este projeto da fila desta equipe?')) return;
+  try {
+    const res = await fetch(`/dashboard/equipes/fila-extra/${atribuicaoId}/remove/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrfToken() },
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Erro ao remover da fila.'); return; }
+    btn.closest('div').remove();
+  } catch {
+    alert('Erro de conexão ao remover da fila.');
   }
 }
 

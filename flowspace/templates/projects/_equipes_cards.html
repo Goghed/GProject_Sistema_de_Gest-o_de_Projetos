@@ -168,6 +168,21 @@
       </div>
       {% endif %}
     </div>
+    {% else %}
+    <!-- Fila 4+ (sem limite) -->
+    <div class="{% if atrib.projeto.status == 'on_hold' %}eq-pause-{{ atrib.projeto.cidade|default:'itu' }}{% endif %}" style="border-left:3px solid #cbd5e1;padding:6px 10px;background:#f8fafc;border-radius:0 6px 6px 0">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#64748b;text-transform:uppercase;margin-bottom:3px;display:flex;align-items:center">
+        ⏳ {{ atrib.posicao_label }}
+        {% if atrib.projeto.status == 'on_hold' %}
+        <span class="eq-siren" data-project="{{ atrib.projeto.name }}"
+              data-notes="{% for n in atrib.projeto.pause_notes.all %}{{ n.note }}|||{{ n.created_at|date:'d/m/Y H:i' }}{% if not forloop.last %}@@@{% endif %}{% endfor %}"
+              onmouseenter="showPausePopup(this)" onmouseleave="hidePausePopup()">🚨</span>
+        {% endif %}
+      </div>
+      {% if atrib.projeto %}
+      <div style="font-size:12px;font-weight:600;color:#475569">{{ atrib.projeto.name }}</div>
+      {% endif %}
+    </div>
     {% endif %}
     {% endfor %}
 

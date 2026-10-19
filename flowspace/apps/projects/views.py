@@ -16,6 +16,40 @@ from apps.common.uploads import validate_image_upload, validate_generic_upload
 from .forms import ProjectDocumentForm
 
 
+def _save_extra_auxiliares(req, equipe):
+    """Lê as linhas dinâmicas de auxiliares extras (aux_nome_0,
+    aux_user_0, aux_foto_0, aux_id_0, aux_nome_1, ...) e sincroniza
+    com EquipeAuxiliar — cria/atualiza as enviadas, remove as que
+    não vieram mais (foram removidas na tela). Usado tanto no editor de
+    Equipes Técnicas quanto na criação de projeto (cadastro de equipe nova)."""
+    count = int(req.POST.get("aux_count") or 0)
+    kept_ids = []
+    for i in range(count):
+        nome = req.POST.get(f"aux_nome_{i}", "").strip()
+        aux_id = req.POST.get(f"aux_id_{i}", "").strip()
+        user_id = req.POST.get(f"aux_user_{i}", "").strip()
+        aux_user = User.objects.filter(pk=user_id).first() if user_id else None
+        display_nome = nome or (aux_user.get_full_name() if aux_user else "")
+        if not display_nome and not aux_user:
+            continue
+        aux = EquipeAuxiliar.objects.filter(pk=aux_id, equipe=equipe).first() if aux_id else None
+        if aux is None:
+            aux = EquipeAuxiliar(equipe=equipe)
+        aux.nome  = display_nome
+        aux.user  = aux_user
+        aux.ordem = i
+        foto = req.FILES.get(f"aux_foto_{i}")
+        if foto:
+            try:
+                validate_image_upload(foto)
+                aux.foto = foto
+            except ValidationError:
+                pass
+        aux.save()
+        kept_ids.append(str(aux.pk))
+    equipe.auxiliares_extra.exclude(pk__in=kept_ids).delete()
+
+
 def _month_context():
     today = date.today()
     months = []
@@ -302,38 +336,6 @@ def equipes_view(request):
         def _resolve_user(uid):
             return User.objects.filter(pk=uid).first() if uid else None
 
-        def _save_extra_auxiliares(req, equipe):
-            """Lê as linhas dinâmicas de auxiliares extras (aux_nome_0,
-            aux_user_0, aux_foto_0, aux_id_0, aux_nome_1, ...) e sincroniza
-            com EquipeAuxiliar — cria/atualiza as enviadas, remove as que
-            não vieram mais (foram removidas na tela)."""
-            count = int(req.POST.get("aux_count") or 0)
-            kept_ids = []
-            for i in range(count):
-                nome = req.POST.get(f"aux_nome_{i}", "").strip()
-                aux_id = req.POST.get(f"aux_id_{i}", "").strip()
-                user_id = req.POST.get(f"aux_user_{i}", "").strip()
-                aux_user = User.objects.filter(pk=user_id).first() if user_id else None
-                display_nome = nome or (aux_user.get_full_name() if aux_user else "")
-                if not display_nome and not aux_user:
-                    continue
-                aux = EquipeAuxiliar.objects.filter(pk=aux_id, equipe=equipe).first() if aux_id else None
-                if aux is None:
-                    aux = EquipeAuxiliar(equipe=equipe)
-                aux.nome  = display_nome
-                aux.user  = aux_user
-                aux.ordem = i
-                foto = req.FILES.get(f"aux_foto_{i}")
-                if foto:
-                    try:
-                        validate_image_upload(foto)
-                        aux.foto = foto
-                    except ValidationError:
-                        pass
-                aux.save()
-                kept_ids.append(str(aux.pk))
-            equipe.auxiliares_extra.exclude(pk__in=kept_ids).delete()
-
         if action == "add_equipe":
             t_user = _resolve_user(request.POST.get("tecnico_user_id"))
             a_user = _resolve_user(request.POST.get("auxiliar_user_id"))
@@ -395,6 +397,19 @@ def equipes_view(request):
         elif action == "delete_equipe":
             EquipeTecnica.objects.filter(pk=request.POST.get("equipe_id")).delete()
             messages.success(request, "Equipe excluída.")
+
+        elif action == "update_status":
+            # Troca rápida de status (Ativa/Inativa/Férias) direto no card —
+            # os demais dados da equipe (técnico, auxiliares, foto, veículo)
+            # agora são editados na tela de Criar Projeto.
+            equipe = get_object_or_404(EquipeTecnica, pk=request.POST.get("equipe_id"))
+            _status = request.POST.get("status", "")
+            if _status in dict(EquipeTecnica.STATUS_CHOICES):
+                equipe.status = _status
+                equipe.save(update_fields=["status"])
+                messages.success(request, "Status da equipe atualizado.")
+            else:
+                messages.error(request, "Status inválido.")
 
         elif action == "save_fila":
             equipe = get_object_or_404(
@@ -473,6 +488,8 @@ def equipes_view(request):
             }
             for a in auxiliares_extra
         ]
+        slots_extra = sorted([a for a in atribs if a.posicao > 3], key=lambda a: a.posicao)
+
         equipes.append({
             "obj":             e,
             "color":           CITY_COLORS.get(e.cidade, CARD_COLORS[i % len(CARD_COLORS)]),
@@ -480,6 +497,7 @@ def equipes_view(request):
             "slot_fila1":      slot_map.get(1),
             "slot_fila2":      slot_map.get(2),
             "slot_fila3":      slot_map.get(3),
+            "slots_extra":     slots_extra,
             "slots_json":      _json.dumps(slots_js),
             "tecnico_user_id": str(e.tecnico_user_id) if e.tecnico_user_id else "",
             "auxiliar_user_id":str(e.auxiliar_user_id) if e.auxiliar_user_id else "",
@@ -644,6 +662,17 @@ def equipe_save_slot(request, equipe_id, posicao):
 
 
 @login_required
+@require_POST
+def equipe_remove_extra(request, atribuicao_id):
+    """Remove um item da fila além das 4 posições fixas (criado automaticamente
+    ao cadastrar um projeto para uma equipe cuja fila já estava cheia)."""
+    if not request.user.can_manage:
+        return JsonResponse({"ok": False, "error": "Sem permissão."}, status=403)
+    AtribuicaoEquipe.objects.filter(pk=atribuicao_id).delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
 def project_list(request):
     cidade_filter = request.GET.get("cidade", "").strip().lower()
     if cidade_filter not in ("londrina", "itu"):
@@ -667,9 +696,30 @@ def project_list(request):
 
 @login_required
 def project_create(request):
+    from django.db.models import Count, Max as _Max
+
     colors = [("#5b4cf5","Violeta"),("#0ea5e9","Azul"),("#34d399","Verde"),("#fbbf24","Âmbar"),("#ff6b6b","Coral"),("#a855f7","Roxo"),("#ec4899","Rosa"),("#14b8a6","Teal")]
     eligible_managers = User.objects.filter(role__in=["owner","admin","manager"]).order_by("first_name")
     all_users = User.objects.all().order_by("first_name")
+    equipes_existentes = list(
+        EquipeTecnica.objects.select_related("tecnico_user", "auxiliar_user")
+        .prefetch_related(Prefetch("auxiliares_extra", queryset=EquipeAuxiliar.objects.select_related("user").order_by("ordem")))
+        .annotate(fila_count=Count("atribuicoes"))
+        .order_by("ordem", "tecnico")
+    )
+    for _eq in equipes_existentes:
+        _eq.tecnico_user_id_str  = str(_eq.tecnico_user_id) if _eq.tecnico_user_id else ""
+        _eq.auxiliar_user_id_str = str(_eq.auxiliar_user_id) if _eq.auxiliar_user_id else ""
+        _eq.foto_url          = _eq.foto.url if _eq.foto else ""
+        _eq.foto_auxiliar_url = _eq.foto_auxiliar.url if _eq.foto_auxiliar else ""
+        _eq.aux_json = json.dumps([
+            {"id": str(a.pk), "nome": a.nome, "user_id": str(a.user_id) if a.user_id else "", "foto_url": a.foto.url if a.foto else ""}
+            for a in _eq.auxiliares_extra.all()
+        ])
+    ctx_base = {
+        "colors": colors, "eligible_managers": eligible_managers,
+        "all_users": all_users, "equipes_existentes": equipes_existentes,
+    }
 
     if request.method == "POST":
         # Campos básicos
@@ -679,7 +729,7 @@ def project_create(request):
                 validate_image_upload(cover, max_size=8 * 1024 * 1024)
             except ValidationError as e:
                 messages.error(request, e.message)
-                return render(request, "projects/create.html", {"colors": colors, "eligible_managers": eligible_managers, "all_users": all_users})
+                return render(request, "projects/create.html", ctx_base)
 
         _cidade = request.POST.get("cidade", "").strip()
         if _cidade not in ("londrina", "itu"):
@@ -743,14 +793,65 @@ def project_create(request):
         for name, color, done, pos in [("Backlog","#8888aa",False,0),("A Fazer","#5b4cf5",False,1),("Em Progresso","#0ea5e9",False,2),("Review","#fbbf24",False,3),("Concluído","#34d399",True,4)]:
             Column.objects.create(project=p, name=name, color=color, is_done_column=done, position=pos)
 
+        # Equipe técnica — cria uma equipe nova ou usa uma existente e
+        # adiciona este projeto na próxima vaga livre da fila dela (sem
+        # limite: se as posições 0-3 já estiverem ocupadas, cria a fila 4,
+        # 5 etc.).
+        equipe_choice = request.POST.get("equipe_choice", "").strip()
+        equipe = None
+        if equipe_choice == "new" or equipe_choice.startswith("existing:"):
+            t_user = User.objects.filter(pk=request.POST.get("eq_tecnico_user_id")).first() if request.POST.get("eq_tecnico_user_id") else None
+            a_user = User.objects.filter(pk=request.POST.get("eq_auxiliar_user_id")).first() if request.POST.get("eq_auxiliar_user_id") else None
+            tecnico_nome_raw = request.POST.get("eq_tecnico", "").strip()
+
+            if equipe_choice == "new":
+                tecnico_nome = tecnico_nome_raw or (t_user.get_full_name() if t_user else "")
+                if tecnico_nome:
+                    equipe = EquipeTecnica.objects.create(tecnico=tecnico_nome, cidade=_cidade)
+            else:
+                equipe = EquipeTecnica.objects.filter(pk=equipe_choice.split(":", 1)[1]).first()
+
+            # Qualquer campo preenchido aqui (foto, auxiliares, veículo etc.)
+            # é salvo direto na equipe — tanto pra uma nova quanto pra
+            # completar/corrigir os dados de uma equipe já existente.
+            if equipe:
+                equipe.tecnico_user  = t_user
+                equipe.auxiliar_user = a_user
+                equipe.tecnico  = tecnico_nome_raw or (t_user.get_full_name() if t_user else equipe.tecnico)
+                equipe.auxiliar = request.POST.get("eq_auxiliar", "").strip() or (a_user.get_full_name() if a_user else "")
+                equipe.veiculo  = request.POST.get("eq_veiculo", "").strip()
+                equipe.placa    = request.POST.get("eq_placa", "").strip().upper()
+                ordem_raw = request.POST.get("eq_ordem", "").strip()
+                if ordem_raw:
+                    equipe.ordem = int(ordem_raw)
+                for field_name, file_key in (("foto", "eq_foto"), ("foto_auxiliar", "eq_foto_auxiliar")):
+                    if request.FILES.get(file_key):
+                        try:
+                            validate_image_upload(request.FILES[file_key])
+                            setattr(equipe, field_name, request.FILES[file_key])
+                        except ValidationError:
+                            pass
+                equipe.save()
+                _save_extra_auxiliares(request, equipe)
+
+        if equipe:
+            next_pos = equipe.atribuicoes.aggregate(m=_Max("posicao"))["m"]
+            next_pos = 0 if next_pos is None else next_pos + 1
+            AtribuicaoEquipe.objects.create(
+                equipe=equipe, projeto=p, posicao=next_pos,
+                tipo_instalacao=request.POST.get("eq_tipo", "").strip(),
+                varejo_projeto=request.POST.get("eq_varejo", "").strip(),
+                dias_execucao=request.POST.get("dias_execucao", "").strip(),
+                data_inicio=p.start_date,
+                data_termino=p.due_date,
+            )
+            if next_pos == 0:
+                p.members.add(*equipe.membros_sistema())
+
         messages.success(request, f"Projeto '{p.name}' criado!")
         return redirect("projects:kanban", pk=p.pk)
 
-    return render(request, "projects/create.html", {
-        "colors":            colors,
-        "eligible_managers": eligible_managers,
-        "all_users":         all_users,
-    })
+    return render(request, "projects/create.html", ctx_base)
 
 
 @login_required

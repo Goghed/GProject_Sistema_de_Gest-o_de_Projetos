@@ -198,7 +198,11 @@ class AtribuicaoEquipe(models.Model):
     id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     equipe          = models.ForeignKey(EquipeTecnica, on_delete=models.CASCADE, related_name="atribuicoes")
     projeto         = models.ForeignKey("Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="atribuicoes_equipe", verbose_name="Projeto")
-    posicao         = models.PositiveSmallIntegerField(choices=POSICAO_CHOICES, default=0, verbose_name="Posição na fila")
+    # Posições 0-3 têm rótulo fixo (Atualmente/Fila 1-3) e são editadas pelo
+    # modal "Gerenciar Fila"; posições >=4 são criadas automaticamente quando
+    # um projeto é atribuído a uma equipe cuja fila 0-3 já está cheia (sem
+    # limite de tamanho da fila).
+    posicao         = models.PositiveSmallIntegerField(default=0, verbose_name="Posição na fila")
     tipo_instalacao = models.CharField(max_length=100, blank=True, verbose_name="Tipo de instalação")
     varejo_projeto  = models.CharField(max_length=50, blank=True, verbose_name="Varejo/Projeto")
     dias_execucao   = models.CharField(max_length=50, blank=True, verbose_name="Dias de execução")
@@ -212,10 +216,13 @@ class AtribuicaoEquipe(models.Model):
         verbose_name = "Atribuição de Equipe"
         verbose_name_plural = "Atribuições de Equipes"
 
+    @property
+    def posicao_label(self):
+        return dict(self.POSICAO_CHOICES).get(self.posicao, f"Fila {self.posicao}")
+
     def __str__(self):
-        label = dict(self.POSICAO_CHOICES).get(self.posicao, "?")
         nome_projeto = self.projeto.name if self.projeto else "—"
-        return f"{self.equipe} — {label}: {nome_projeto}"
+        return f"{self.equipe} — {self.posicao_label}: {nome_projeto}"
 
 
 class ProjectDocument(models.Model):

@@ -526,3 +526,150 @@ class EquipeExtraAuxiliaresTests(TestCase):
         extras = list(equipe.auxiliares_extra.all())
         self.assertEqual(len(extras), 1)
         self.assertEqual(extras[0].nome, "Fica Editado")
+
+
+class ProjectCreateEquipeTests(TestCase):
+    """Criar Projeto pode cadastrar uma equipe nova ou atribuir a uma
+    existente — o projeto entra na próxima vaga livre da fila (0-3 tem
+    rótulo fixo; a partir da 4 a fila é ilimitada)."""
+
+    def setUp(self):
+        self.manager = User.objects.create_user(
+            username="regtest_create_eq_mgr", password="testpass123", role="manager",
+        )
+        self.client = Client()
+        self.client.force_login(self.manager)
+
+    def test_create_project_with_new_equipe(self):
+        resp = self.client.post(reverse("projects:create"), data={
+            "name": "Projeto Com Equipe Nova", "description": "", "scope": "",
+            "color": "#5b4cf5", "cidade": "itu",
+            "start_date": "", "due_date": "", "manager": str(self.manager.pk),
+            "equipe_choice": "new", "eq_tecnico": "Tecnico Novo",
+            "eq_veiculo": "Polo", "eq_placa": "abc1d23", "aux_count": "0",
+        })
+        self.assertEqual(resp.status_code, 302, resp.content)
+        project = Project.objects.get(name="Projeto Com Equipe Nova")
+        equipe = EquipeTecnica.objects.get(tecnico="Tecnico Novo")
+        self.assertEqual(equipe.placa, "ABC1D23")
+        atrib = AtribuicaoEquipe.objects.get(equipe=equipe, projeto=project)
+        self.assertEqual(atrib.posicao, 0)
+
+    def test_second_project_for_same_equipe_goes_to_next_position(self):
+        equipe = EquipeTecnica.objects.create(tecnico="Equipe Existente")
+        existing_project = Project.objects.create(name="Projeto Atual", owner=self.manager)
+        AtribuicaoEquipe.objects.create(equipe=equipe, projeto=existing_project, posicao=0)
+
+        resp = self.client.post(reverse("projects:create"), data={
+            "name": "Projeto Fila 1", "description": "", "scope": "",
+            "color": "#5b4cf5", "cidade": "",
+            "start_date": "", "due_date": "", "manager": str(self.manager.pk),
+            "equipe_choice": f"existing:{equipe.pk}",
+        })
+        self.assertEqual(resp.status_code, 302, resp.content)
+        project = Project.objects.get(name="Projeto Fila 1")
+        atrib = AtribuicaoEquipe.objects.get(equipe=equipe, projeto=project)
+        self.assertEqual(atrib.posicao, 1)
+
+    def test_fila_has_no_hard_cap_at_four(self):
+        equipe = EquipeTecnica.objects.create(tecnico="Equipe Cheia")
+        for pos in range(4):
+            AtribuicaoEquipe.objects.create(equipe=equipe, posicao=pos)
+
+        resp = self.client.post(reverse("projects:create"), data={
+            "name": "Projeto Fila 5", "description": "", "scope": "",
+            "color": "#5b4cf5", "cidade": "",
+            "start_date": "", "due_date": "", "manager": str(self.manager.pk),
+            "equipe_choice": f"existing:{equipe.pk}",
+        })
+        self.assertEqual(resp.status_code, 302, resp.content)
+        project = Project.objects.get(name="Projeto Fila 5")
+        atrib = AtribuicaoEquipe.objects.get(equipe=equipe, projeto=project)
+        self.assertEqual(atrib.posicao, 4)
+        self.assertEqual(atrib.posicao_label, "Fila 4")
+
+    def test_choosing_existing_equipe_updates_its_photo_and_auxiliares(self):
+        """Ao escolher uma equipe já existente na tela de Criar Projeto, os
+        campos de foto/veículo/auxiliares ficam editáveis e qualquer
+        alteração é salva de volta na equipe (não só na equipe nova)."""
+        equipe = EquipeTecnica.objects.create(tecnico="Equipe Para Completar", veiculo="Gol", placa="AAA1A11")
+        extra = EquipeAuxiliar.objects.create(equipe=equipe, nome="Aux Antigo")
+
+        resp = self.client.post(reverse("projects:create"), data={
+            "name": "Projeto Completa Equipe", "description": "", "scope": "",
+            "color": "#5b4cf5", "cidade": "",
+            "start_date": "", "due_date": "", "manager": str(self.manager.pk),
+            "equipe_choice": f"existing:{equipe.pk}",
+            "eq_tecnico": "Equipe Para Completar",
+            "eq_veiculo": "Polo Atualizado", "eq_placa": "bbb2b22",
+            "aux_count": "2",
+            "aux_id_0": str(extra.pk), "aux_nome_0": "Aux Antigo Editado", "aux_user_0": "",
+            "aux_id_1": "", "aux_nome_1": "Aux Novo", "aux_user_1": "",
+        })
+        self.assertEqual(resp.status_code, 302, resp.content)
+        equipe.refresh_from_db()
+        self.assertEqual(equipe.veiculo, "Polo Atualizado")
+        self.assertEqual(equipe.placa, "BBB2B22")
+        extras = list(equipe.auxiliares_extra.values_list("nome", flat=True))
+        self.assertEqual(len(extras), 2)
+        self.assertIn("Aux Antigo Editado", extras)
+        self.assertIn("Aux Novo", extras)
+
+    def test_equipe_remove_extra_requires_manage_permission(self):
+        equipe = EquipeTecnica.objects.create(tecnico="Equipe Extra")
+        atrib = AtribuicaoEquipe.objects.create(equipe=equipe, posicao=4)
+        member = User.objects.create_user(username="regtest_create_eq_member", password="testpass123", role="member")
+        client2 = Client()
+        client2.force_login(member)
+
+        resp = client2.post(reverse("projects:equipe_remove_extra", args=[atrib.pk]))
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(AtribuicaoEquipe.objects.filter(pk=atrib.pk).exists())
+
+        resp2 = self.client.post(reverse("projects:equipe_remove_extra", args=[atrib.pk]))
+        self.assertEqual(resp2.status_code, 200)
+        self.assertFalse(AtribuicaoEquipe.objects.filter(pk=atrib.pk).exists())
+
+
+class EquipeStatusOnlyModalTests(TestCase):
+    """O card de Equipes Técnicas não edita mais técnico/auxiliares/foto/
+    veículo (isso agora é feito na tela de Criar Projeto) — só troca o
+    status (Ativa/Inativa/Férias) por um modal mínimo."""
+
+    def setUp(self):
+        self.manager = User.objects.create_user(
+            username="regtest_status_mgr", password="testpass123", role="manager",
+        )
+        self.client = Client()
+        self.client.force_login(self.manager)
+
+    def test_update_status_changes_status_without_touching_other_fields(self):
+        equipe = EquipeTecnica.objects.create(
+            tecnico="Equipe Status", veiculo="Gol", placa="AAA1A11", status="ativa",
+        )
+        resp = self.client.post(reverse("projects:equipes"), data={
+            "action": "update_status", "equipe_id": str(equipe.pk),
+            "status": "ferias", "cidade_filter": "",
+        })
+        self.assertEqual(resp.status_code, 302)
+        equipe.refresh_from_db()
+        self.assertEqual(equipe.status, "ferias")
+        self.assertEqual(equipe.veiculo, "Gol")
+        self.assertEqual(equipe.placa, "AAA1A11")
+
+    def test_update_status_rejects_invalid_status(self):
+        equipe = EquipeTecnica.objects.create(tecnico="Equipe Status Invalida", status="ativa")
+        resp = self.client.post(reverse("projects:equipes"), data={
+            "action": "update_status", "equipe_id": str(equipe.pk),
+            "status": "nao_existe", "cidade_filter": "",
+        })
+        self.assertEqual(resp.status_code, 302)
+        equipe.refresh_from_db()
+        self.assertEqual(equipe.status, "ativa")
+
+    def test_equipes_page_no_longer_exposes_full_edit_modal(self):
+        resp = self.client.get(reverse("projects:equipes"))
+        content = resp.content.decode()
+        self.assertIn("openStatusModalFromBtn", content)
+        self.assertNotIn("openEditModalFromBtn", content)
+        self.assertNotIn("Editar Equipe", content)
