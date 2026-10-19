@@ -11,6 +11,8 @@ urlpatterns = [
     path("projects/<uuid:pk>/list/",  views.project_list_view, name="task_list"),
     path("projects/<uuid:pk>/settings/",      views.project_settings,   name="settings"),
     path("projects/<uuid:pk>/delete/",        views.project_delete,     name="delete"),
+    path("projects/<uuid:pk>/pause/",         views.project_pause,      name="project_pause"),
+    path("projects/<uuid:pk>/resume/",        views.project_resume,     name="project_resume"),
     path("projects/<uuid:pk>/report/",        views.project_report,     name="report"),
     path("projects/<uuid:pk>/retrospective/", views.save_retrospective, name="retrospective"),
     path("projects/<uuid:pk>/flow/",          views.project_flow,       name="flow"),
@@ -21,5 +23,6 @@ urlpatterns = [
     path("tasks/<uuid:task_pk>/move/",        views.move_task,          name="move_task"),
     path("insights/",                         views.insights,           name="insights"),
     path("equipes/",                          views.equipes_view,        name="equipes"),
+    path("equipes/<uuid:equipe_id>/reorder/", views.equipe_reorder,      name="equipe_reorder"),
     path("stats.json",                        views.dashboard_stats_json, name="stats_json"),
 ]

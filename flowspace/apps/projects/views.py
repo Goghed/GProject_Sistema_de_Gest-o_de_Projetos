@@ -8,7 +8,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db.models import Prefetch
-from .models import Project, Column, ProjectDocument, ProjectMemberActivity, EquipeTecnica, AtribuicaoEquipe
+from .models import Project, Column, ProjectDocument, ProjectMemberActivity, EquipeTecnica, AtribuicaoEquipe, ProjectPauseNote
 from apps.tasks.models import Task, TaskDependency
 from apps.accounts.models import User
 from apps.common.uploads import validate_image_upload, validate_generic_upload
@@ -125,7 +125,7 @@ def _build_gantt_rows(proj_list, today):
 
 
 def _get_equipes(cidade_filter):
-    equipes_qs = EquipeTecnica.objects.filter(is_active=True).select_related("tecnico_user", "auxiliar_user")
+    equipes_qs = EquipeTecnica.objects.filter(status="ativa").select_related("tecnico_user", "auxiliar_user")
     if cidade_filter:
         equipes_qs = equipes_qs.filter(cidade=cidade_filter)
     return list(
@@ -343,7 +343,8 @@ def equipes_view(request):
             equipe.placa         = request.POST.get("placa", "").strip().upper()
             equipe.cidade        = _eq_cidade if _eq_cidade in ("londrina", "itu") else ""
             equipe.ordem         = int(request.POST.get("ordem") or 0)
-            equipe.is_active     = request.POST.get("is_active") == "1"
+            _status = request.POST.get("status", "ativa")
+            equipe.status        = _status if _status in dict(EquipeTecnica.STATUS_CHOICES) else "ativa"
             for field_name, file_key in (("foto", "foto"), ("foto_auxiliar", "foto_auxiliar")):
                 if request.FILES.get(file_key):
                     try:
@@ -397,12 +398,17 @@ def equipes_view(request):
     cidade_filter = request.GET.get("cidade", "").strip().lower()
     if cidade_filter not in ("londrina", "itu"):
         cidade_filter = ""
+    status_filter = request.GET.get("status", "").strip().lower()
+    if status_filter not in dict(EquipeTecnica.STATUS_CHOICES):
+        status_filter = ""
 
     eq_qs = EquipeTecnica.objects.select_related("tecnico_user", "auxiliar_user").prefetch_related(
-        Prefetch("atribuicoes", queryset=AtribuicaoEquipe.objects.select_related("projeto").order_by("posicao"))
+        Prefetch("atribuicoes", queryset=AtribuicaoEquipe.objects.select_related("projeto").prefetch_related("projeto__pause_notes").order_by("posicao"))
     ).order_by("ordem", "tecnico")
     if cidade_filter:
         eq_qs = eq_qs.filter(cidade=cidade_filter)
+    if status_filter:
+        eq_qs = eq_qs.filter(status=status_filter)
     raw = list(eq_qs)
 
     equipes = []
@@ -434,13 +440,98 @@ def equipes_view(request):
     em_campo_count = sum(1 for e in equipes if e["slot_atual"])
     all_projects = list(Project.objects.filter(status__in=["active","on_hold"]).order_by("name"))
     all_users    = list(User.objects.filter(is_active=True).order_by("first_name", "last_name"))
+
+    _count_base = EquipeTecnica.objects.all()
+    if cidade_filter:
+        _count_base = _count_base.filter(cidade=cidade_filter)
+    status_counts = {
+        "total":   _count_base.count(),
+        "ativa":   _count_base.filter(status="ativa").count(),
+        "inativa": _count_base.filter(status="inativa").count(),
+        "ferias":  _count_base.filter(status="ferias").count(),
+    }
+
     return render(request, "projects/equipes.html", {
         "equipes":        equipes,
         "em_campo_count": em_campo_count,
         "all_projects":   all_projects,
         "all_users":      all_users,
         "cidade_filter":  cidade_filter,
+        "status_filter":  status_filter,
+        "status_counts":  status_counts,
     })
+
+
+@login_required
+@require_POST
+def equipe_reorder(request, equipe_id):
+    """Arrastar-e-soltar: troca o projeto (e todos os dados do slot) entre
+    duas posições da fila de uma equipe — usado tanto pelo card quanto pelo
+    modal 'Gerenciar Fila'."""
+    if not request.user.can_manage:
+        return JsonResponse({"ok": False, "error": "Sem permissão."}, status=403)
+    try:
+        data = json.loads(request.body)
+        from_pos = int(data.get("from_posicao"))
+        to_pos   = int(data.get("to_posicao"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"ok": False, "error": "Dados inválidos."}, status=400)
+    if from_pos == to_pos or from_pos not in range(4) or to_pos not in range(4):
+        return JsonResponse({"ok": False, "error": "Posições inválidas."}, status=400)
+
+    equipe = get_object_or_404(EquipeTecnica, pk=equipe_id)
+    FIELDS = ["projeto", "tipo_instalacao", "varejo_projeto", "dias_execucao", "data_inicio", "data_termino"]
+    a_from = AtribuicaoEquipe.objects.filter(equipe=equipe, posicao=from_pos).first()
+    a_to   = AtribuicaoEquipe.objects.filter(equipe=equipe, posicao=to_pos).first()
+    vals_from = {f: getattr(a_from, f) for f in FIELDS} if a_from else None
+    vals_to   = {f: getattr(a_to, f) for f in FIELDS} if a_to else None
+
+    def _apply(pos, vals):
+        if vals is None:
+            AtribuicaoEquipe.objects.filter(equipe=equipe, posicao=pos).delete()
+        else:
+            AtribuicaoEquipe.objects.update_or_create(equipe=equipe, posicao=pos, defaults=vals)
+
+    _apply(from_pos, vals_to)
+    _apply(to_pos, vals_from)
+
+    # Mesmo comportamento do save_fila: quem assume o slot "Atualmente" tem
+    # a equipe auto-adicionada como membro do projeto.
+    if from_pos == 0 or to_pos == 0:
+        atual = AtribuicaoEquipe.objects.filter(equipe=equipe, posicao=0, projeto__isnull=False).select_related("projeto").first()
+        if atual:
+            atual.projeto.members.add(*equipe.membros_sistema())
+
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def project_pause(request, pk):
+    """Pausa o projeto (status vira 'on_hold' em todo o sistema) e registra o
+    motivo — aparece como sirene no card da equipe que está nele."""
+    if not request.user.can_manage:
+        return JsonResponse({"ok": False, "error": "Sem permissão."}, status=403)
+    project = get_object_or_404(Project, pk=pk)
+    note = request.POST.get("note", "").strip()
+    if not note:
+        return JsonResponse({"ok": False, "error": "Descreva o motivo da pausa."}, status=400)
+    project.status = "on_hold"
+    project.save(update_fields=["status"])
+    ProjectPauseNote.objects.create(project=project, note=note, created_by=request.user)
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def project_resume(request, pk):
+    """Retoma um projeto pausado (volta para 'active')."""
+    if not request.user.can_manage:
+        return JsonResponse({"ok": False, "error": "Sem permissão."}, status=403)
+    project = get_object_or_404(Project, pk=pk)
+    project.status = "active"
+    project.save(update_fields=["status"])
+    return JsonResponse({"ok": True})
 
 
 @login_required

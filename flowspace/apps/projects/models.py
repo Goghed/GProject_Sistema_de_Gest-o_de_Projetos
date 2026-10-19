@@ -103,6 +103,11 @@ User = get_user_model()
 
 
 class EquipeTecnica(models.Model):
+    STATUS_CHOICES = [
+        ("ativa",   "Ativa"),
+        ("inativa", "Inativa"),
+        ("ferias",  "Férias"),
+    ]
     id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tecnico       = models.CharField(max_length=100, verbose_name="Nome do Técnico")
     tecnico_user  = models.ForeignKey(
@@ -121,7 +126,7 @@ class EquipeTecnica(models.Model):
     veiculo   = models.CharField(max_length=100, blank=True, verbose_name="Veículo")
     placa     = models.CharField(max_length=10, blank=True, verbose_name="Placa do Veículo")
     cidade    = models.CharField(max_length=20, choices=CIDADE_CHOICES, blank=True, default="", verbose_name="Cidade")
-    is_active = models.BooleanField(default=True, verbose_name="Ativa")
+    status    = models.CharField(max_length=10, choices=STATUS_CHOICES, default="ativa", verbose_name="Status")
     ordem     = models.PositiveSmallIntegerField(default=0, verbose_name="Ordem de exibição")
 
     class Meta:
@@ -213,3 +218,20 @@ class ProjectDocument(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class ProjectPauseNote(models.Model):
+    """Observação registrada pelo gestor ao pausar um projeto (o motivo que
+    aparece no ícone de sirene do card da equipe)."""
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project    = models.ForeignKey("Project", on_delete=models.CASCADE, related_name="pause_notes")
+    note       = models.TextField()
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "projects_pause_note"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Pausa de {self.project.name} em {self.created_at:%d/%m/%Y}"

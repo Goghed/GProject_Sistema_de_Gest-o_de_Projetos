@@ -24,9 +24,9 @@ class AtribuicaoEquipeInline(admin.TabularInline):
 
 @admin.register(EquipeTecnica)
 class EquipeTecnicaAdmin(admin.ModelAdmin):
-    list_display  = ["tecnico", "auxiliar", "veiculo", "is_active", "ordem"]
-    list_filter   = ["is_active"]
-    list_editable = ["ordem", "is_active"]
+    list_display  = ["tecnico", "auxiliar", "veiculo", "status", "ordem"]
+    list_filter   = ["status"]
+    list_editable = ["ordem", "status"]
     inlines       = [AtribuicaoEquipeInline]
 
 

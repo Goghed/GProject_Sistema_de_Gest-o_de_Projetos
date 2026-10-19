@@ -15,7 +15,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 
 from apps.accounts.models import User
-from apps.projects.models import Project, Column
+from apps.projects.models import Project, Column, EquipeTecnica, AtribuicaoEquipe
 from apps.tasks.models import Task
 
 
@@ -335,3 +335,128 @@ class ApiDoneTasksTests(TestCase):
             resp.json()["stats"]["done_tasks"], 1,
             "API dashboard done_tasks must survive project completion",
         )
+
+
+class EquipeStatusFilterTests(TestCase):
+    """Equipe status expanded from a boolean (is_active) to a 3-state field
+    (ativa/inativa/ferias); the Equipes page filter and card styling depend
+    on this field existing and being queryable."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="regtest_eq_owner", password="testpass123", role="owner",
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.ativa = EquipeTecnica.objects.create(tecnico="Equipe Ativa", status="ativa")
+        self.ferias = EquipeTecnica.objects.create(tecnico="Equipe Ferias", status="ferias")
+        self.inativa = EquipeTecnica.objects.create(tecnico="Equipe Inativa", status="inativa")
+
+    def test_default_listing_shows_all_statuses(self):
+        resp = self.client.get(reverse("projects:equipes"))
+        self.assertEqual(resp.status_code, 200)
+        for e in (self.ativa, self.ferias, self.inativa):
+            self.assertContains(resp, e.tecnico)
+
+    def test_status_filter_narrows_listing(self):
+        resp = self.client.get(reverse("projects:equipes"), {"status": "ferias"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Equipe Ferias")
+        self.assertNotContains(resp, "Equipe Ativa")
+        self.assertNotContains(resp, "Equipe Inativa")
+
+    def test_ferias_card_gets_gray_css_class(self):
+        resp = self.client.get(reverse("projects:equipes"))
+        self.assertContains(resp, "eq-card-ferias")
+
+    def test_only_active_teams_feed_the_dashboard(self):
+        resp = self.client.get(reverse("projects:dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Equipe Ativa")
+        self.assertNotContains(resp, "Equipe Ferias")
+        self.assertNotContains(resp, "Equipe Inativa")
+
+
+class EquipeReorderTests(TestCase):
+    """Drag-and-drop in the Equipes page: dragging a project onto another
+    slot swaps the two slots' full assignment (project + metadata)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="regtest_reorder_owner", password="testpass123", role="owner",
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.p0 = Project.objects.create(name="Projeto Atual", owner=self.user)
+        self.p1 = Project.objects.create(name="Projeto Fila1", owner=self.user)
+        self.equipe = EquipeTecnica.objects.create(tecnico="Equipe Reorder")
+        AtribuicaoEquipe.objects.create(
+            equipe=self.equipe, projeto=self.p0, posicao=0, tipo_instalacao="Retrofit",
+        )
+        AtribuicaoEquipe.objects.create(equipe=self.equipe, projeto=self.p1, posicao=1)
+
+    def test_swap_promotes_queued_project_to_current(self):
+        resp = self.client.post(
+            reverse("projects:equipe_reorder", args=[self.equipe.pk]),
+            data=json.dumps({"from_posicao": 1, "to_posicao": 0}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertTrue(resp.json()["ok"])
+
+        atual = AtribuicaoEquipe.objects.get(equipe=self.equipe, posicao=0)
+        fila1 = AtribuicaoEquipe.objects.get(equipe=self.equipe, posicao=1)
+        self.assertEqual(atual.projeto, self.p1)
+        self.assertEqual(fila1.projeto, self.p0)
+        self.assertEqual(fila1.tipo_instalacao, "Retrofit", "slot metadata must move with the project")
+
+    def test_promoting_to_current_adds_team_as_project_member(self):
+        tech = User.objects.create_user(username="regtest_tech", password="testpass123")
+        self.equipe.tecnico_user = tech
+        self.equipe.save(update_fields=["tecnico_user"])
+
+        self.client.post(
+            reverse("projects:equipe_reorder", args=[self.equipe.pk]),
+            data=json.dumps({"from_posicao": 1, "to_posicao": 0}),
+            content_type="application/json",
+        )
+        self.assertIn(tech, self.p1.members.all())
+
+
+class ProjectPauseResumeTests(TestCase):
+    """Pausing a project (from the Equipes card) sets status='on_hold'
+    system-wide and records why; the reason is what shows as the siren
+    tooltip on the team card."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="regtest_pause_owner", password="testpass123", role="owner",
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.project = Project.objects.create(name="Projeto Pausavel", owner=self.user, status="active")
+
+    def test_pause_requires_a_note(self):
+        resp = self.client.post(reverse("projects:project_pause", args=[self.project.pk]), data={})
+        self.assertEqual(resp.status_code, 400)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.status, "active")
+
+    def test_pause_sets_on_hold_and_records_note(self):
+        resp = self.client.post(
+            reverse("projects:project_pause", args=[self.project.pk]),
+            data={"note": "Faltam materiais"},
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.status, "on_hold")
+        self.assertEqual(list(self.project.pause_notes.values_list("note", flat=True)), ["Faltam materiais"])
+
+    def test_resume_sets_active_again(self):
+        self.project.status = "on_hold"
+        self.project.save(update_fields=["status"])
+
+        resp = self.client.post(reverse("projects:project_resume", args=[self.project.pk]))
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.status, "active")

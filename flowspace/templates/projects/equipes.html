@@ -3,19 +3,39 @@
 {% block page_title %}Equipes Técnicas{% endblock %}
 
 {% block topbar_actions %}
-<div style="display:flex;gap:6px;align-items:center">
-  <a href="{% url 'projects:equipes' %}"
-     style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid var(--border2);{% if not cidade_filter %}background:var(--accent);color:#fff;border-color:var(--accent);{% else %}color:var(--text2);{% endif %}">
-    Todas
-  </a>
-  <a href="{% url 'projects:equipes' %}?cidade=londrina"
-     style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if cidade_filter == 'londrina' %}#dc2626{% else %}var(--border2){% endif %};{% if cidade_filter == 'londrina' %}background:#dc2626;color:#fff;{% else %}color:#dc2626;{% endif %}">
-    Londrina
-  </a>
-  <a href="{% url 'projects:equipes' %}?cidade=itu"
-     style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if cidade_filter == 'itu' %}#d97706{% else %}var(--border2){% endif %};{% if cidade_filter == 'itu' %}background:#d97706;color:#fff;{% else %}color:#d97706;{% endif %}">
-    Itu
-  </a>
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+  <div style="display:flex;gap:6px;align-items:center">
+    <a href="?{% if status_filter %}status={{ status_filter }}&{% endif %}"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid var(--border2);{% if not cidade_filter %}background:var(--accent);color:#fff;border-color:var(--accent);{% else %}color:var(--text2);{% endif %}">
+      Todas
+    </a>
+    <a href="?cidade=londrina{% if status_filter %}&status={{ status_filter }}{% endif %}"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if cidade_filter == 'londrina' %}#dc2626{% else %}var(--border2){% endif %};{% if cidade_filter == 'londrina' %}background:#dc2626;color:#fff;{% else %}color:#dc2626;{% endif %}">
+      Londrina
+    </a>
+    <a href="?cidade=itu{% if status_filter %}&status={{ status_filter }}{% endif %}"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if cidade_filter == 'itu' %}#d97706{% else %}var(--border2){% endif %};{% if cidade_filter == 'itu' %}background:#d97706;color:#fff;{% else %}color:#d97706;{% endif %}">
+      Itu
+    </a>
+  </div>
+  <div style="display:flex;gap:6px;align-items:center;padding-left:10px;border-left:1px solid var(--border2)">
+    <a href="?{% if cidade_filter %}cidade={{ cidade_filter }}&{% endif %}"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid var(--border2);{% if not status_filter %}background:var(--surface2);color:var(--text);{% else %}color:var(--text2);{% endif %}">
+      Todos status
+    </a>
+    <a href="?{% if cidade_filter %}cidade={{ cidade_filter }}&{% endif %}status=ativa"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if status_filter == 'ativa' %}#059669{% else %}var(--border2){% endif %};{% if status_filter == 'ativa' %}background:#059669;color:#fff;{% else %}color:#059669;{% endif %}">
+      Ativas
+    </a>
+    <a href="?{% if cidade_filter %}cidade={{ cidade_filter }}&{% endif %}status=inativa"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if status_filter == 'inativa' %}#dc2626{% else %}var(--border2){% endif %};{% if status_filter == 'inativa' %}background:#dc2626;color:#fff;{% else %}color:#dc2626;{% endif %}">
+      Inativas
+    </a>
+    <a href="?{% if cidade_filter %}cidade={{ cidade_filter }}&{% endif %}status=ferias"
+       style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid {% if status_filter == 'ferias' %}#64748b{% else %}var(--border2){% endif %};{% if status_filter == 'ferias' %}background:#64748b;color:#fff;{% else %}color:#64748b;{% endif %}">
+      Férias
+    </a>
+  </div>
 </div>
 <button class="btn btn-primary btn-sm" onclick="openAddModal()">
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
@@ -78,9 +98,37 @@
 }
 .eq-status-active   { background: rgba(52,211,153,.2); color: #6ee7b7; }
 .eq-status-inactive { background: rgba(255,107,107,.2); color: #fca5a5; }
+.eq-status-ferias   { background: rgba(255,255,255,.25); color: #fff; }
+
+/* Equipe de férias: card inteiro em cinza */
+.eq-card-ferias { filter: grayscale(0.9); opacity: 0.75; }
+.eq-card-ferias:hover { opacity: 0.95; }
 
 /* ── Slots ── */
 .eq-slots { padding: 12px 14px; display: flex; flex-direction: column; gap: 7px; }
+
+/* Arrastar-e-soltar dos slots (card) */
+.eq-slot[draggable="true"] { cursor: grab; transition: background .15s, box-shadow .15s, opacity .15s; }
+.eq-slot[draggable="true"]:active { cursor: grabbing; }
+.eq-slot-dragging { opacity: 0.4; }
+.eq-slot-dragover { box-shadow: inset 0 0 0 2px var(--accent); background: var(--surface3) !important; }
+
+/* Pílula de cor do projeto (identificador visual, igual na criação de projeto) */
+.eq-proj-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; margin-right: 5px; vertical-align: middle; }
+
+/* Sirene de projeto pausado */
+.eq-siren {
+  cursor: help; font-size: 12px; margin-left: 5px;
+  animation: eq-siren-blink 1s ease-in-out infinite;
+}
+@keyframes eq-siren-blink { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+/* Botões pausar/retomar no slot "Atualmente" */
+.eq-slot-pause-btn {
+  font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 8px;
+  border: 1px solid currentColor; background: transparent; cursor: pointer;
+  margin-top: 4px; display: inline-flex; align-items: center; gap: 3px;
+}
 
 .eq-slot {
   border-radius: 8px; padding: 9px 11px;
@@ -195,33 +243,34 @@
 {% endif %}
 
 <!-- Stats bar -->
-{% with total=equipes|length %}
 <div class="eq-stats fade-up">
   <div class="eq-stat-chip">
-    <div class="eq-stat-num">{{ total }}</div>
+    <div class="eq-stat-num">{{ status_counts.total }}</div>
     <div class="eq-stat-label">Equipes cadastradas</div>
   </div>
   <div class="eq-stat-chip">
-    <div class="eq-stat-num" style="color:var(--accent)">
-      {% with cnt=0 %}
-        {% for item in equipes %}{% if item.obj.is_active %}{% with cnt=cnt %}{% endwith %}{% endif %}{% endfor %}
-        {{ equipes|length }}
-      {% endwith %}
-    </div>
+    <div class="eq-stat-num" style="color:#059669">{{ status_counts.ativa }}</div>
     <div class="eq-stat-label">Ativas</div>
+  </div>
+  <div class="eq-stat-chip">
+    <div class="eq-stat-num" style="color:#dc2626">{{ status_counts.inativa }}</div>
+    <div class="eq-stat-label">Inativas</div>
+  </div>
+  <div class="eq-stat-chip">
+    <div class="eq-stat-num" style="color:#64748b">{{ status_counts.ferias }}</div>
+    <div class="eq-stat-label">Férias</div>
   </div>
   <div class="eq-stat-chip">
     <div class="eq-stat-num" style="color:#22c55e">{{ em_campo_count }}</div>
     <div class="eq-stat-label">Em campo agora</div>
   </div>
 </div>
-{% endwith %}
 
 <!-- Cards grid -->
 {% if equipes %}
 <div class="eq-grid">
 {% for item in equipes %}
-<div class="eq-card fade-up" style="animation-delay:{{ forloop.counter0 }}00ms">
+<div class="eq-card fade-up{% if item.obj.status == 'ferias' %} eq-card-ferias{% endif %}" style="animation-delay:{{ forloop.counter0 }}00ms">
 
   <!-- Header -->
   <div class="eq-header" style="background: linear-gradient(135deg, {{ item.color }} 0%, {{ item.color }}cc 100%)">
@@ -250,8 +299,10 @@
           {% endif %}
         {% endif %}
       </div>
-      {% if item.obj.is_active %}
+      {% if item.obj.status == 'ativa' %}
       <span class="eq-status-badge eq-status-active">Ativa</span>
+      {% elif item.obj.status == 'ferias' %}
+      <span class="eq-status-badge eq-status-ferias">✈ Férias</span>
       {% else %}
       <span class="eq-status-badge eq-status-inactive">Inativa</span>
       {% endif %}
@@ -291,12 +342,18 @@
 
     <!-- Atualmente -->
     {% if item.slot_atual %}
-    <div class="eq-slot eq-slot-atual">
+    <div class="eq-slot eq-slot-atual" draggable="true" data-equipe="{{ item.obj.pk }}" data-posicao="0">
       <div class="eq-slot-label">
         <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         Atualmente
+        {% if item.slot_atual.projeto.status == 'on_hold' %}
+        <span class="eq-siren" title="⏸ Pausado{% for n in item.slot_atual.projeto.pause_notes.all %}&#10;• {{ n.note }} ({{ n.created_at|date:'d/m/Y' }}){% endfor %}">🚨</span>
+        {% endif %}
       </div>
-      <div class="eq-slot-name">{{ item.slot_atual.projeto.name|default:"—" }}</div>
+      <div class="eq-slot-name">
+        {% if item.slot_atual.projeto.color %}<span class="eq-proj-dot" style="background:{{ item.slot_atual.projeto.color }}"></span>{% endif %}
+        {{ item.slot_atual.projeto.name|default:"—" }}
+      </div>
       <div class="eq-slot-sub">
         {% if item.slot_atual.tipo_instalacao %}<span class="eq-tag">{{ item.slot_atual.tipo_instalacao }}</span>{% endif %}
         {% if item.slot_atual.varejo_projeto %}<span class="eq-tag">{{ item.slot_atual.varejo_projeto }}</span>{% endif %}
@@ -307,9 +364,16 @@
         {{ item.slot_atual.data_inicio|date:"d/m/Y"|default:"" }}{% if item.slot_atual.data_inicio and item.slot_atual.data_termino %} → {% endif %}{{ item.slot_atual.data_termino|date:"d/m/Y"|default:"" }}
       </div>
       {% endif %}
+      {% if item.slot_atual.projeto %}
+        {% if item.slot_atual.projeto.status == 'on_hold' %}
+        <button type="button" class="eq-slot-pause-btn" style="color:#059669" onclick="resumeProject('{{ item.slot_atual.projeto.pk }}')">▶ Retomar</button>
+        {% else %}
+        <button type="button" class="eq-slot-pause-btn" style="color:#b45309" onclick="openPauseModal('{{ item.slot_atual.projeto.pk }}','{{ item.slot_atual.projeto.name|escapejs }}')">⏸ Pausar projeto</button>
+        {% endif %}
+      {% endif %}
     </div>
     {% else %}
-    <div class="eq-slot eq-slot-empty">
+    <div class="eq-slot eq-slot-empty" data-equipe="{{ item.obj.pk }}" data-posicao="0">
       <div class="eq-slot-label">
         <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         Atualmente
@@ -320,9 +384,12 @@
 
     <!-- Fila 1 -->
     {% if item.slot_fila1 %}
-    <div class="eq-slot eq-slot-fila1">
+    <div class="eq-slot eq-slot-fila1" draggable="true" data-equipe="{{ item.obj.pk }}" data-posicao="1">
       <div class="eq-slot-label">⏳ Fila 1</div>
-      <div class="eq-slot-name">{{ item.slot_fila1.projeto.name|default:"—" }}</div>
+      <div class="eq-slot-name">
+        {% if item.slot_fila1.projeto.color %}<span class="eq-proj-dot" style="background:{{ item.slot_fila1.projeto.color }}"></span>{% endif %}
+        {{ item.slot_fila1.projeto.name|default:"—" }}
+      </div>
       <div class="eq-slot-sub">
         {% if item.slot_fila1.tipo_instalacao %}<span class="eq-tag">{{ item.slot_fila1.tipo_instalacao }}</span>{% endif %}
         {% if item.slot_fila1.dias_execucao %}<span class="eq-tag">{{ item.slot_fila1.dias_execucao }}</span>{% endif %}
@@ -334,16 +401,19 @@
       {% endif %}
     </div>
     {% else %}
-    <div class="eq-slot eq-slot-empty" style="padding:6px 11px">
+    <div class="eq-slot eq-slot-empty" data-equipe="{{ item.obj.pk }}" data-posicao="1" style="padding:6px 11px">
       <div class="eq-slot-label" style="color:var(--text3)">⏳ Fila 1 — <span style="font-weight:400;font-style:italic">vazio</span></div>
     </div>
     {% endif %}
 
     <!-- Fila 2 -->
     {% if item.slot_fila2 %}
-    <div class="eq-slot eq-slot-fila2">
+    <div class="eq-slot eq-slot-fila2" draggable="true" data-equipe="{{ item.obj.pk }}" data-posicao="2">
       <div class="eq-slot-label">⏳ Fila 2</div>
-      <div class="eq-slot-name">{{ item.slot_fila2.projeto.name|default:"—" }}</div>
+      <div class="eq-slot-name">
+        {% if item.slot_fila2.projeto.color %}<span class="eq-proj-dot" style="background:{{ item.slot_fila2.projeto.color }}"></span>{% endif %}
+        {{ item.slot_fila2.projeto.name|default:"—" }}
+      </div>
       <div class="eq-slot-sub">
         {% if item.slot_fila2.tipo_instalacao %}<span class="eq-tag">{{ item.slot_fila2.tipo_instalacao }}</span>{% endif %}
         {% if item.slot_fila2.dias_execucao %}<span class="eq-tag">{{ item.slot_fila2.dias_execucao }}</span>{% endif %}
@@ -353,16 +423,19 @@
       {% endif %}
     </div>
     {% else %}
-    <div class="eq-slot eq-slot-empty" style="padding:6px 11px">
+    <div class="eq-slot eq-slot-empty" data-equipe="{{ item.obj.pk }}" data-posicao="2" style="padding:6px 11px">
       <div class="eq-slot-label" style="color:var(--text3)">⏳ Fila 2 — <span style="font-weight:400;font-style:italic">vazio</span></div>
     </div>
     {% endif %}
 
     <!-- Fila 3 -->
     {% if item.slot_fila3 %}
-    <div class="eq-slot eq-slot-fila3">
+    <div class="eq-slot eq-slot-fila3" draggable="true" data-equipe="{{ item.obj.pk }}" data-posicao="3">
       <div class="eq-slot-label">⏳ Fila 3</div>
-      <div class="eq-slot-name">{{ item.slot_fila3.projeto.name|default:"—" }}</div>
+      <div class="eq-slot-name">
+        {% if item.slot_fila3.projeto.color %}<span class="eq-proj-dot" style="background:{{ item.slot_fila3.projeto.color }}"></span>{% endif %}
+        {{ item.slot_fila3.projeto.name|default:"—" }}
+      </div>
       <div class="eq-slot-sub">
         {% if item.slot_fila3.tipo_instalacao %}<span class="eq-tag">{{ item.slot_fila3.tipo_instalacao }}</span>{% endif %}
         {% if item.slot_fila3.dias_execucao %}<span class="eq-tag">{{ item.slot_fila3.dias_execucao }}</span>{% endif %}
@@ -372,7 +445,7 @@
       {% endif %}
     </div>
     {% else %}
-    <div class="eq-slot eq-slot-empty" style="padding:6px 11px">
+    <div class="eq-slot eq-slot-empty" data-equipe="{{ item.obj.pk }}" data-posicao="3" style="padding:6px 11px">
       <div class="eq-slot-label" style="color:var(--text3)">⏳ Fila 3 — <span style="font-weight:400;font-style:italic">vazio</span></div>
     </div>
     {% endif %}
@@ -390,7 +463,7 @@
             data-veiculo="{{ item.obj.veiculo|escapejs }}"
             data-placa="{{ item.obj.placa|escapejs }}"
             data-ordem="{{ item.obj.ordem }}"
-            data-active="{{ item.obj.is_active|yesno:'true,false' }}"
+            data-status="{{ item.obj.status }}"
             data-foto="{% if item.obj.foto %}{{ item.obj.foto.url }}{% endif %}"
             data-foto-auxiliar="{% if item.obj.foto_auxiliar %}{{ item.obj.foto_auxiliar.url }}{% endif %}"
             data-cidade="{{ item.obj.cidade }}"
@@ -623,12 +696,16 @@
         <label class="form-label">Status</label>
         <div style="display:flex;gap:12px;margin-top:4px">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-            <input type="radio" name="is_active" value="1" id="edit-active-yes" style="accent-color:var(--accent)">
+            <input type="radio" name="status" value="ativa" id="edit-status-ativa" style="accent-color:#059669">
             <span style="color:#059669;font-weight:600">Ativa</span>
           </label>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-            <input type="radio" name="is_active" value="0" id="edit-active-no" style="accent-color:#dc2626">
+            <input type="radio" name="status" value="inativa" id="edit-status-inativa" style="accent-color:#dc2626">
             <span style="color:#dc2626;font-weight:600">Inativa</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="radio" name="status" value="ferias" id="edit-status-ferias" style="accent-color:#64748b">
+            <span style="color:#64748b;font-weight:600">Férias</span>
           </label>
         </div>
       </div>
@@ -675,7 +752,7 @@
             <select name="s{{ pos }}_projeto" id="s{{ pos }}_projeto" class="form-control">
               <option value="">— Selecionar projeto —</option>
               {% for p in all_projects %}
-              <option value="{{ p.pk }}">{{ p.name }}</option>
+              <option value="{{ p.pk }}" style="color:{{ p.color }};font-weight:600">● {{ p.name }}</option>
               {% endfor %}
             </select>
           </div>
@@ -715,6 +792,29 @@
     </form>
   </div>
 </div>
+
+
+<!-- ── Modal: Pausar Projeto ──────────────────────────────────────────────── -->
+<div class="modal-overlay" id="pause-modal">
+  <div class="modal-box" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title" style="color:#b45309">🚨 Pausar Projeto</div>
+      <button class="modal-close" onclick="document.getElementById('pause-modal').classList.remove('open')">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:10px">
+      Pausar <strong id="pause-project-name"></strong>. O status muda para "Em Pausa" em todo o sistema e o motivo fica visível no card da equipe.
+    </p>
+    <div class="form-group">
+      <label class="form-label">Motivo da pausa *</label>
+      <textarea id="pause-note" class="form-control" rows="3" placeholder="Ex: Faltam materiais, aguardando liberação do cliente..."></textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button type="button" class="btn btn-primary" style="flex:1;background:#b45309" onclick="submitPause()">Confirmar Pausa</button>
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('pause-modal').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 
 <!-- ── Form oculto para delete ───────────────────────────────────────────── -->
 <form method="post" id="delete-form" style="display:none">
@@ -758,7 +858,7 @@ function autoFillName(sel, targetId) {
 }
 
 function openEditModalFromBtn(btn) {
-  const isActive = btn.dataset.active === 'true';
+  const status   = btn.dataset.status || 'ativa';
   const fotoUrl  = btn.dataset.foto;
   const fotoAuxiliarUrl = btn.dataset.fotoAuxiliar;
   const preview  = document.getElementById('edit-foto-preview');
@@ -771,8 +871,9 @@ function openEditModalFromBtn(btn) {
   document.getElementById('edit-veiculo').value      = btn.dataset.veiculo;
   document.getElementById('edit-placa').value        = btn.dataset.placa;
   document.getElementById('edit-ordem').value        = btn.dataset.ordem;
-  document.getElementById('edit-active-yes').checked = isActive;
-  document.getElementById('edit-active-no').checked  = !isActive;
+  document.getElementById('edit-status-ativa').checked   = status === 'ativa';
+  document.getElementById('edit-status-inativa').checked = status === 'inativa';
+  document.getElementById('edit-status-ferias').checked  = status === 'ferias';
   document.getElementById('edit-foto').value         = '';
   document.getElementById('edit-foto-auxiliar').value = '';
   setSelectVal('edit-tecnico-user',  btn.dataset.tecnicoUser);
@@ -834,6 +935,140 @@ function deleteEquipe(id, name) {
   document.getElementById('delete-equipe-id').value = id;
   document.getElementById('delete-form').submit();
 }
+
+function getCsrfToken() {
+  const el = document.querySelector('[name=csrfmiddlewaretoken]');
+  return el ? el.value : '';
+}
+
+/* ── Pausar / Retomar projeto ─────────────────────────────────────────────── */
+let pausingProjectId = null;
+
+function openPauseModal(projectId, projectName) {
+  pausingProjectId = projectId;
+  document.getElementById('pause-project-name').textContent = projectName;
+  document.getElementById('pause-note').value = '';
+  document.getElementById('pause-modal').classList.add('open');
+}
+
+async function submitPause() {
+  const note = document.getElementById('pause-note').value.trim();
+  if (!note) { alert('Descreva o motivo da pausa.'); return; }
+  try {
+    const res = await fetch(`/dashboard/projects/${pausingProjectId}/pause/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'note=' + encodeURIComponent(note),
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Erro ao pausar projeto.'); return; }
+    location.reload();
+  } catch {
+    alert('Erro de conexão ao pausar projeto.');
+  }
+}
+
+async function resumeProject(projectId) {
+  if (!confirm('Retomar este projeto? O status volta para "Ativo".')) return;
+  try {
+    const res = await fetch(`/dashboard/projects/${projectId}/resume/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrfToken() },
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Erro ao retomar projeto.'); return; }
+    location.reload();
+  } catch {
+    alert('Erro de conexão ao retomar projeto.');
+  }
+}
+
+/* ── Arrastar-e-soltar dos slots no card (muda na hora, via API) ──────────── */
+async function reorderSlots(equipeId, fromPos, toPos) {
+  try {
+    const res = await fetch(`/dashboard/equipes/${equipeId}/reorder/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from_posicao: Number(fromPos), to_posicao: Number(toPos) }),
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Erro ao reordenar.'); return; }
+    location.reload();
+  } catch {
+    alert('Erro de conexão ao reordenar.');
+  }
+}
+
+(function setupCardDragDrop() {
+  let dragSrc = null;
+  document.querySelectorAll('.eq-slot[data-equipe]').forEach(slot => {
+    if (slot.hasAttribute('draggable')) {
+      slot.addEventListener('dragstart', e => {
+        dragSrc = slot;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', slot.dataset.equipe + ':' + slot.dataset.posicao);
+        slot.classList.add('eq-slot-dragging');
+      });
+      slot.addEventListener('dragend', () => slot.classList.remove('eq-slot-dragging'));
+    }
+    slot.addEventListener('dragover', e => {
+      if (!dragSrc || dragSrc.dataset.equipe !== slot.dataset.equipe) return;
+      e.preventDefault();
+      slot.classList.add('eq-slot-dragover');
+    });
+    slot.addEventListener('dragleave', () => slot.classList.remove('eq-slot-dragover'));
+    slot.addEventListener('drop', e => {
+      e.preventDefault();
+      slot.classList.remove('eq-slot-dragover');
+      if (!dragSrc || dragSrc === slot) return;
+      if (dragSrc.dataset.equipe !== slot.dataset.equipe) {
+        alert('Só é possível reordenar dentro da mesma equipe.');
+        return;
+      }
+      reorderSlots(slot.dataset.equipe, dragSrc.dataset.posicao, slot.dataset.posicao);
+    });
+  });
+})();
+
+/* ── Arrastar-e-soltar dentro do modal "Gerenciar Fila" (só troca os campos
+   do formulário — nada é salvo até clicar em "Salvar Fila") ──────────────── */
+(function setupFilaModalDragDrop() {
+  const FIELDS = ['projeto', 'tipo', 'varejo', 'dias', 'inicio', 'termino'];
+  let dragSrcPos = null;
+
+  function swapFilaSlotValues(posA, posB) {
+    const valsA = {}, valsB = {};
+    FIELDS.forEach(f => {
+      valsA[f] = document.getElementById(`s${posA}_${f}`).value;
+      valsB[f] = document.getElementById(`s${posB}_${f}`).value;
+    });
+    FIELDS.forEach(f => {
+      document.getElementById(`s${posA}_${f}`).value = valsB[f];
+      document.getElementById(`s${posB}_${f}`).value = valsA[f];
+    });
+  }
+
+  document.querySelectorAll('.fila-slot').forEach(block => {
+    const pos = block.className.match(/fila-slot-(\d)/)[1];
+    const header = block.querySelector('.fila-slot-header');
+    header.draggable = true;
+    header.style.cursor = 'grab';
+    header.addEventListener('dragstart', e => {
+      dragSrcPos = pos;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', pos);
+      block.style.opacity = '0.4';
+    });
+    header.addEventListener('dragend', () => { block.style.opacity = ''; });
+    block.addEventListener('dragover', e => { if (dragSrcPos !== null) e.preventDefault(); });
+    block.addEventListener('drop', e => {
+      e.preventDefault();
+      if (dragSrcPos === null || dragSrcPos === pos) return;
+      swapFilaSlotValues(dragSrcPos, pos);
+      dragSrcPos = null;
+    });
+  });
+})();
 
 /* Fechar modal clicando fora */
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
