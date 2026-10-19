@@ -15,7 +15,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 
 from apps.accounts.models import User
-from apps.projects.models import Project, Column, EquipeTecnica, AtribuicaoEquipe
+from apps.projects.models import Project, Column, EquipeTecnica, AtribuicaoEquipe, EquipeAuxiliar
 from apps.tasks.models import Task
 
 
@@ -460,3 +460,45 @@ class ProjectPauseResumeTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)
         self.project.refresh_from_db()
         self.assertEqual(self.project.status, "active")
+
+
+class EquipeExtraAuxiliaresTests(TestCase):
+    """A team can have more than one auxiliar (EquipeAuxiliar, additive to
+    the existing single auxiliar/auxiliar_user fields on EquipeTecnica)."""
+
+    def setUp(self):
+        self.owner = User.objects.create_user(
+            username="regtest_aux_owner", password="testpass123", role="owner",
+        )
+        self.client = Client()
+        self.client.force_login(self.owner)
+        self.sys_user = User.objects.create_user(username="regtest_aux_sysuser", password="testpass123")
+
+    def test_create_with_multiple_extra_auxiliares(self):
+        resp = self.client.post(reverse("projects:equipes"), data={
+            "action": "add_equipe", "tecnico": "Equipe Multi Aux", "cidade_filter": "",
+            "aux_count": "2",
+            "aux_id_0": "", "aux_nome_0": "Extra Um", "aux_user_0": "",
+            "aux_id_1": "", "aux_nome_1": "", "aux_user_1": str(self.sys_user.pk),
+        })
+        self.assertEqual(resp.status_code, 302)
+        equipe = EquipeTecnica.objects.get(tecnico="Equipe Multi Aux")
+        extras = list(equipe.auxiliares_extra.all())
+        self.assertEqual(len(extras), 2)
+        self.assertIn(self.sys_user, equipe.membros_sistema())
+
+    def test_edit_removes_auxiliar_not_resubmitted(self):
+        equipe = EquipeTecnica.objects.create(tecnico="Equipe Aux Edit")
+        kept = EquipeAuxiliar.objects.create(equipe=equipe, nome="Fica")
+        EquipeAuxiliar.objects.create(equipe=equipe, nome="Sai")
+
+        resp = self.client.post(reverse("projects:equipes"), data={
+            "action": "edit_equipe", "equipe_id": str(equipe.pk), "tecnico": "Equipe Aux Edit",
+            "cidade_filter": "", "status": "ativa", "ordem": "0",
+            "aux_count": "1",
+            "aux_id_0": str(kept.pk), "aux_nome_0": "Fica Editado", "aux_user_0": "",
+        })
+        self.assertEqual(resp.status_code, 302)
+        extras = list(equipe.auxiliares_extra.all())
+        self.assertEqual(len(extras), 1)
+        self.assertEqual(extras[0].nome, "Fica Editado")

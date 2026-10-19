@@ -8,7 +8,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db.models import Prefetch
-from .models import Project, Column, ProjectDocument, ProjectMemberActivity, EquipeTecnica, AtribuicaoEquipe, ProjectPauseNote
+from .models import Project, Column, ProjectDocument, ProjectMemberActivity, EquipeTecnica, AtribuicaoEquipe, ProjectPauseNote, EquipeAuxiliar
 from apps.tasks.models import Task, TaskDependency
 from apps.accounts.models import User
 from apps.common.uploads import validate_image_upload, validate_generic_upload
@@ -300,6 +300,38 @@ def equipes_view(request):
         def _resolve_user(uid):
             return User.objects.filter(pk=uid).first() if uid else None
 
+        def _save_extra_auxiliares(req, equipe):
+            """Lê as linhas dinâmicas de auxiliares extras (aux_nome_0,
+            aux_user_0, aux_foto_0, aux_id_0, aux_nome_1, ...) e sincroniza
+            com EquipeAuxiliar — cria/atualiza as enviadas, remove as que
+            não vieram mais (foram removidas na tela)."""
+            count = int(req.POST.get("aux_count") or 0)
+            kept_ids = []
+            for i in range(count):
+                nome = req.POST.get(f"aux_nome_{i}", "").strip()
+                aux_id = req.POST.get(f"aux_id_{i}", "").strip()
+                user_id = req.POST.get(f"aux_user_{i}", "").strip()
+                aux_user = User.objects.filter(pk=user_id).first() if user_id else None
+                display_nome = nome or (aux_user.get_full_name() if aux_user else "")
+                if not display_nome and not aux_user:
+                    continue
+                aux = EquipeAuxiliar.objects.filter(pk=aux_id, equipe=equipe).first() if aux_id else None
+                if aux is None:
+                    aux = EquipeAuxiliar(equipe=equipe)
+                aux.nome  = display_nome
+                aux.user  = aux_user
+                aux.ordem = i
+                foto = req.FILES.get(f"aux_foto_{i}")
+                if foto:
+                    try:
+                        validate_image_upload(foto)
+                        aux.foto = foto
+                    except ValidationError:
+                        pass
+                aux.save()
+                kept_ids.append(str(aux.pk))
+            equipe.auxiliares_extra.exclude(pk__in=kept_ids).delete()
+
         if action == "add_equipe":
             t_user = _resolve_user(request.POST.get("tecnico_user_id"))
             a_user = _resolve_user(request.POST.get("auxiliar_user_id"))
@@ -328,6 +360,7 @@ def equipes_view(request):
                         return redirect("projects:equipes")
                     setattr(equipe, field_name, request.FILES[file_key])
             equipe.save()
+            _save_extra_auxiliares(request, equipe)
             messages.success(request, "Equipe criada com sucesso.")
 
         elif action == "edit_equipe":
@@ -354,6 +387,7 @@ def equipes_view(request):
                         return redirect("projects:equipes")
                     setattr(equipe, field_name, request.FILES[file_key])
             equipe.save()
+            _save_extra_auxiliares(request, equipe)
             messages.success(request, "Equipe atualizada.")
 
         elif action == "delete_equipe":
@@ -403,7 +437,8 @@ def equipes_view(request):
         status_filter = ""
 
     eq_qs = EquipeTecnica.objects.select_related("tecnico_user", "auxiliar_user").prefetch_related(
-        Prefetch("atribuicoes", queryset=AtribuicaoEquipe.objects.select_related("projeto").prefetch_related("projeto__pause_notes").order_by("posicao"))
+        Prefetch("atribuicoes", queryset=AtribuicaoEquipe.objects.select_related("projeto").prefetch_related("projeto__pause_notes").order_by("posicao")),
+        Prefetch("auxiliares_extra", queryset=EquipeAuxiliar.objects.select_related("user").order_by("ordem")),
     ).order_by("ordem", "tecnico")
     if cidade_filter:
         eq_qs = eq_qs.filter(cidade=cidade_filter)
@@ -425,6 +460,17 @@ def equipes_view(request):
                 "inicio":  a.data_inicio.strftime("%Y-%m-%d")  if a.data_inicio  else "",
                 "termino": a.data_termino.strftime("%Y-%m-%d") if a.data_termino else "",
             }
+        auxiliares_extra = list(e.auxiliares_extra.all())
+        aux_extra_js = [
+            {
+                "id":      str(a.pk),
+                "nome":    a.nome,
+                "user_id": str(a.user_id) if a.user_id else "",
+                "foto_url": a.foto.url if a.foto else "",
+                "display": a.display,
+            }
+            for a in auxiliares_extra
+        ]
         equipes.append({
             "obj":             e,
             "color":           CITY_COLORS.get(e.cidade, CARD_COLORS[i % len(CARD_COLORS)]),
@@ -435,6 +481,8 @@ def equipes_view(request):
             "slots_json":      _json.dumps(slots_js),
             "tecnico_user_id": str(e.tecnico_user_id) if e.tecnico_user_id else "",
             "auxiliar_user_id":str(e.auxiliar_user_id) if e.auxiliar_user_id else "",
+            "auxiliares_extra":     auxiliares_extra,
+            "auxiliares_extra_json": _json.dumps(aux_extra_js),
         })
 
     em_campo_count = sum(1 for e in equipes if e["slot_atual"])

@@ -151,8 +151,41 @@ class EquipeTecnica(models.Model):
         return self.auxiliar
 
     def membros_sistema(self):
-        """Retorna lista de usuários vinculados à equipe."""
-        return [u for u in [self.tecnico_user, self.auxiliar_user] if u]
+        """Retorna lista de usuários vinculados à equipe (técnico, auxiliar
+        principal e todos os auxiliares extras)."""
+        users = [u for u in [self.tecnico_user, self.auxiliar_user] if u]
+        users += [a.user for a in self.auxiliares_extra.all() if a.user_id]
+        return users
+
+
+class EquipeAuxiliar(models.Model):
+    """Auxiliares além do principal (EquipeTecnica.auxiliar) — uma equipe
+    pode ter vários."""
+    id     = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    equipe = models.ForeignKey(EquipeTecnica, on_delete=models.CASCADE, related_name="auxiliares_extra")
+    nome   = models.CharField(max_length=100, verbose_name="Nome do Auxiliar")
+    user   = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="equipes_auxiliar_extra",
+        verbose_name="Auxiliar (usuário do sistema)",
+    )
+    foto   = models.ImageField(upload_to="equipes/fotos/", null=True, blank=True, verbose_name="Foto do Auxiliar")
+    ordem  = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        db_table = "projects_equipe_auxiliar_extra"
+        ordering = ["ordem", "nome"]
+        verbose_name = "Auxiliar Extra"
+        verbose_name_plural = "Auxiliares Extras"
+
+    @property
+    def display(self):
+        if self.user_id:
+            return self.user.get_full_name() or self.user.username
+        return self.nome
+
+    def __str__(self):
+        return self.display
 
 
 class AtribuicaoEquipe(models.Model):
