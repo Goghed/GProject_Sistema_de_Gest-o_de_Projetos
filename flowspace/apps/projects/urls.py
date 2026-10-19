@@ -13,6 +13,7 @@ urlpatterns = [
     path("projects/<uuid:pk>/delete/",        views.project_delete,     name="delete"),
     path("projects/<uuid:pk>/pause/",         views.project_pause,      name="project_pause"),
     path("projects/<uuid:pk>/resume/",        views.project_resume,     name="project_resume"),
+    path("projects/<uuid:pk>/color/",         views.project_update_color, name="project_update_color"),
     path("projects/<uuid:pk>/report/",        views.project_report,     name="report"),
     path("projects/<uuid:pk>/retrospective/", views.save_retrospective, name="retrospective"),
     path("projects/<uuid:pk>/flow/",          views.project_flow,       name="flow"),

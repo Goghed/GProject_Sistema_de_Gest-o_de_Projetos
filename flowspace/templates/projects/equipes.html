@@ -816,7 +816,10 @@
           <div class="form-group" style="margin-bottom:10px">
             <label class="form-label">Projeto</label>
             <div style="display:flex;align-items:center;gap:8px">
-              <span id="s{{ pos }}_color_dot" class="eq-proj-dot" style="width:12px;height:12px;margin:0;flex-shrink:0;background:var(--border2)"></span>
+              <label style="cursor:pointer" title="Clique para mudar a cor deste projeto (afeta o Kanban, Gantt etc. também)">
+                <span id="s{{ pos }}_color_dot" class="eq-proj-dot" style="width:16px;height:16px;margin:0;flex-shrink:0;background:var(--border2);border:1.5px solid rgba(0,0,0,.15)"></span>
+                <input type="color" id="s{{ pos }}_color_input" style="display:none" onchange="changeSlotProjectColor({{ pos }})">
+              </label>
               <select name="s{{ pos }}_projeto" id="s{{ pos }}_projeto" class="form-control" style="flex:1" onchange="updateSlotColorDot({{ pos }})">
                 <option value="">— Selecionar projeto —</option>
                 {% for p in all_projects %}
@@ -1067,9 +1070,45 @@ function openFilaModal(equipeId, equipeName, slots) {
 function updateSlotColorDot(pos) {
   const sel = document.getElementById(`s${pos}_projeto`);
   const dot = document.getElementById(`s${pos}_color_dot`);
+  const colorInput = document.getElementById(`s${pos}_color_input`);
   if (!sel || !dot) return;
   const opt = sel.options[sel.selectedIndex];
-  dot.style.background = (opt && opt.dataset.color) ? opt.dataset.color : 'var(--border2)';
+  const color = (opt && opt.dataset.color) ? opt.dataset.color : null;
+  dot.style.background = color || 'var(--border2)';
+  if (colorInput) colorInput.value = color || '#5b4cf5';
+}
+
+/* ── Clique na bolinha: muda a cor do projeto de verdade (afeta o sistema
+   inteiro — Kanban, Gantt, lista de projetos — não é só visual aqui) ────── */
+async function changeSlotProjectColor(pos) {
+  const sel = document.getElementById(`s${pos}_projeto`);
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.value) {
+    alert('Selecione um projeto neste slot primeiro.');
+    document.getElementById(`s${pos}_color_input`).value = '#5b4cf5';
+    return;
+  }
+  const newColor = document.getElementById(`s${pos}_color_input`).value;
+  try {
+    const res = await fetch(`/dashboard/projects/${opt.value}/color/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'color=' + encodeURIComponent(newColor),
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Erro ao mudar a cor.'); return; }
+    document.getElementById(`s${pos}_color_dot`).style.background = newColor;
+    opt.dataset.color = newColor;
+    for (let p = 0; p < 4; p++) {
+      if (p === pos) continue;
+      const otherSel = document.getElementById(`s${p}_projeto`);
+      if (!otherSel) continue;
+      const otherOpt = Array.from(otherSel.options).find(o => o.value === opt.value);
+      if (otherOpt) otherOpt.dataset.color = newColor;
+    }
+  } catch {
+    alert('Erro de conexão ao mudar a cor.');
+  }
 }
 
 /* ── Pausar o projeto selecionado neste slot ───────────────────────────────── */

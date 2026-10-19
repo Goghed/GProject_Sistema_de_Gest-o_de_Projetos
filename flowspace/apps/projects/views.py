@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date, timedelta
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -580,6 +581,22 @@ def project_resume(request, pk):
     project.status = "active"
     project.save(update_fields=["status"])
     return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def project_update_color(request, pk):
+    """Troca a cor do projeto (clique na bolinha no modal de fila) — é a
+    mesma cor usada em todo o sistema (Kanban, Gantt, lista de projetos)."""
+    if not request.user.can_manage:
+        return JsonResponse({"ok": False, "error": "Sem permissão."}, status=403)
+    project = get_object_or_404(Project, pk=pk)
+    color = request.POST.get("color", "").strip()
+    if not re.match(r"^#[0-9a-fA-F]{6}$", color):
+        return JsonResponse({"ok": False, "error": "Cor inválida."}, status=400)
+    project.color = color
+    project.save(update_fields=["color"])
+    return JsonResponse({"ok": True, "color": color})
 
 
 @login_required
